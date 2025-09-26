@@ -1,257 +1,284 @@
-import React, { useState, useEffect } from "react";
-import { getProjects, createProject, getAllPapers } from "../api";
+import React, { useState, useEffect } from 'react';
+import { createProject, getProjects } from '../api';
 
-export default function ProjectManagement() {
+const ProjectManagement = () => {
     const [projects, setProjects] = useState([]);
-    const [papers, setPapers] = useState([]);
-    const [showProjectForm, setShowProjectForm] = useState(false);
-    const [newProject, setNewProject] = useState({
-        name: "",
-        description: "",
-        investigatory_team: [""],
-        status: "ongoing",
+    const [showForm, setShowForm] = useState(false);
+    const [formData, setFormData] = useState({
+        name: '',
+        description: '',
+        investigatory_team: [''],
+        status: 'ongoing',
         date_initialized: new Date().toISOString().split('T')[0],
-        date_completed: ""
+        date_completed: ''
     });
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        loadProjects();
-        loadPapers();
+        fetchProjects();
     }, []);
 
-    const loadProjects = async () => {
+    const fetchProjects = async () => {
         try {
             const response = await getProjects();
             setProjects(response.data);
         } catch (error) {
-            console.error("Failed to load projects:", error);
+            console.error('Error fetching projects:', error);
         }
     };
 
-    const loadPapers = async () => {
-        try {
-            const response = await getAllPapers();
-            setPapers(response.data);
-        } catch (error) {
-            console.error("Failed to load papers:", error);
-        }
+    const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [name]: value
+        }));
     };
 
     const handleTeamMemberChange = (index, value) => {
-        const updatedTeam = [...newProject.investigatory_team];
-        updatedTeam[index] = value;
-        setNewProject({ ...newProject, investigatory_team: updatedTeam });
+        const newTeam = [...formData.investigatory_team];
+        newTeam[index] = value;
+        setFormData(prev => ({
+            ...prev,
+            investigatory_team: newTeam
+        }));
     };
 
     const addTeamMember = () => {
-        setNewProject({
-            ...newProject,
-            investigatory_team: [...newProject.investigatory_team, ""]
-        });
+        setFormData(prev => ({
+            ...prev,
+            investigatory_team: [...prev.investigatory_team, '']
+        }));
     };
 
     const removeTeamMember = (index) => {
-        const updatedTeam = newProject.investigatory_team.filter((_, i) => i !== index);
-        setNewProject({ ...newProject, investigatory_team: updatedTeam });
-    };
-
-    const handleCreateProject = async (e) => {
-        e.preventDefault();
-        try {
-            const projectData = {
-                ...newProject,
-                date_initialized: new Date(newProject.date_initialized),
-                date_completed: newProject.status === "completed" ? new Date(newProject.date_completed) : null
-            };
-            await createProject(projectData);
-            await loadProjects();
-            setShowProjectForm(false);
-            setNewProject({
-                name: "",
-                description: "",
-                investigatory_team: [""],
-                status: "ongoing",
-                date_initialized: new Date().toISOString().split('T')[0],
-                date_completed: ""
-            });
-        } catch (error) {
-            console.error("Failed to create project:", error);
-            alert("Failed to create project. Please try again.");
+        if (formData.investigatory_team.length > 1) {
+            const newTeam = formData.investigatory_team.filter((_, i) => i !== index);
+            setFormData(prev => ({
+                ...prev,
+                investigatory_team: newTeam
+            }));
         }
     };
 
-    const getPapersByProject = (projectId) => {
-        return papers.filter(paper => paper.project_id === projectId);
-    };
+    const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+        // Filter out empty team members
+        const filteredTeam = formData.investigatory_team.filter(member => member.trim() !== '');
+        if (filteredTeam.length === 0) {
+            alert('Please add at least one team member.');
+            setLoading(false);
+            return;
+        }
+
+        // Prepare data to send
+        const submitData = {
+            ...formData,
+            investigatory_team: filteredTeam,
+            date_initialized: new Date(formData.date_initialized).toISOString(),
+            ...(formData.status === 'completed' && formData.date_completed
+                ? { date_completed: new Date(formData.date_completed).toISOString() }
+                : {})
+        };
+
+        // Make API request
+        await createProject(submitData);
+
+        // Reset form and refresh projects
+        setShowForm(false);
+        setFormData({
+            name: '',
+            description: '',
+            investigatory_team: [''],
+            status: 'ongoing',
+            date_initialized: new Date().toISOString().split('T')[0],
+            date_completed: ''
+        });
+        fetchProjects();
+        alert('Project created successfully!');
+    } catch (error) {
+        console.error('Backend validation errors:', error.response?.data);
+
+        // Display detailed backend errors
+        if (error.response?.data?.detail) {
+            const messages = error.response.data.detail.map((err) => {
+                const loc = err.loc.join(' > ');
+                return `${loc}: ${err.msg}`;
+            }).join('\n');
+            alert('Error creating project:\n' + messages);
+        } else {
+            alert('Error creating project: ' + error.message);
+        }
+    } finally {
+        setLoading(false);
+    }
+};
+
 
     return (
         <div className="project-management">
             <div className="page-header">
                 <h2>Project Management</h2>
-                <p>Manage research projects and their associated documents</p>
-                <button 
-                    className="btn-primary"
-                    onClick={() => setShowProjectForm(true)}
-                >
-                    + Create New Project
-                </button>
+                <p>Create and manage research projects</p>
             </div>
 
-            <div className="projects-grid">
-                {projects.map(project => (
-                    <div key={project.id} className="project-card">
-                        <div className="project-header">
-                            <h3>{project.name}</h3>
-                            <span className={`status-badge ${project.status}`}>
-                                {project.status}
-                            </span>
-                        </div>
-                        
-                        <div className="project-details">
-                            <p className="project-description">{project.description}</p>
-                            
-                            <div className="project-meta">
-                                <div className="meta-item">
-                                    <strong>Team:</strong>
-                                    <div className="team-members">
-                                        {project.investigatory_team.map((member, idx) => (
-                                            <span key={idx} className="team-member">{member}</span>
-                                        ))}
-                                    </div>
-                                </div>
-                                
-                                <div className="meta-item">
-                                    <strong>Initialized:</strong>
-                                    <span>{new Date(project.date_initialized).toLocaleDateString()}</span>
-                                </div>
-                                
-                                {project.status === "completed" && project.date_completed && (
-                                    <div className="meta-item">
-                                        <strong>Completed:</strong>
-                                        <span>{new Date(project.date_completed).toLocaleDateString()}</span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
+            <div className="projects-section">
+                <div className="section-header">
+                    <h3>Existing Projects</h3>
+                    <button 
+                        className="btn-primary"
+                        onClick={() => setShowForm(!showForm)}
+                    >
+                        {showForm ? 'Cancel' : 'Add New Project'}
+                    </button>
+                </div>
 
-                        <div className="project-papers">
-                            <h4>Associated Papers ({getPapersByProject(project.id).length})</h4>
-                            {getPapersByProject(project.id).length > 0 ? (
-                                <ul>
-                                    {getPapersByProject(project.id).map(paper => (
-                                        <li key={paper.id}>{paper.title}</li>
-                                    ))}
-                                </ul>
-                            ) : (
-                                <p className="no-papers">No papers associated with this project</p>
-                            )}
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* Project Creation Modal */}
-            {showProjectForm && (
-                <div className="modal-overlay">
-                    <div className="modal">
-                        <div className="modal-header">
-                            <h3>Create New Project</h3>
-                            <button onClick={() => setShowProjectForm(false)} className="close-btn">×</button>
-                        </div>
-                        
-                        <form onSubmit={handleCreateProject}>
+                {showForm && (
+                    <div className="project-form-container">
+                        <form onSubmit={handleSubmit} className="project-form">
                             <div className="form-grid">
                                 <div className="form-group">
                                     <label>Project Name *</label>
                                     <input
                                         type="text"
-                                        value={newProject.name}
-                                        onChange={(e) => setNewProject({...newProject, name: e.target.value})}
+                                        name="name"
+                                        value={formData.name}
+                                        onChange={handleInputChange}
                                         required
                                     />
                                 </div>
-                                
+
                                 <div className="form-group">
-                                    <label>Status</label>
-                                    <select 
-                                        value={newProject.status}
-                                        onChange={(e) => setNewProject({...newProject, status: e.target.value})}
+                                    <label>Status *</label>
+                                    <select
+                                        name="status"
+                                        value={formData.status}
+                                        onChange={handleInputChange}
                                     >
                                         <option value="ongoing">Ongoing</option>
                                         <option value="completed">Completed</option>
                                     </select>
                                 </div>
-                                
+
                                 <div className="form-group">
                                     <label>Date Initialized *</label>
                                     <input
                                         type="date"
-                                        value={newProject.date_initialized}
-                                        onChange={(e) => setNewProject({...newProject, date_initialized: e.target.value})}
+                                        name="date_initialized"
+                                        value={formData.date_initialized}
+                                        onChange={handleInputChange}
                                         required
                                     />
                                 </div>
-                                
-                                {newProject.status === "completed" && (
+
+                                {formData.status === 'completed' && (
                                     <div className="form-group">
                                         <label>Date Completed</label>
                                         <input
                                             type="date"
-                                            value={newProject.date_completed}
-                                            onChange={(e) => setNewProject({...newProject, date_completed: e.target.value})}
+                                            name="date_completed"
+                                            value={formData.date_completed}
+                                            onChange={handleInputChange}
                                         />
                                     </div>
                                 )}
-                                
+
                                 <div className="form-group full-width">
-                                    <label>Investigatory Team</label>
-                                    {newProject.investigatory_team.map((member, index) => (
+                                    <label>Description</label>
+                                    <textarea
+                                        name="description"
+                                        value={formData.description}
+                                        onChange={handleInputChange}
+                                        rows="3"
+                                    />
+                                </div>
+
+                                <div className="form-group full-width">
+                                    <label>Investigatory Team *</label>
+                                    {formData.investigatory_team.map((member, index) => (
                                         <div key={index} className="array-input">
                                             <input
                                                 type="text"
                                                 value={member}
                                                 onChange={(e) => handleTeamMemberChange(index, e.target.value)}
-                                                placeholder={`Team member ${index + 1}`}
+                                                placeholder="Team member name"
+                                                required
                                             />
-                                            {newProject.investigatory_team.length > 1 && (
-                                                <button 
-                                                    type="button" 
-                                                    onClick={() => removeTeamMember(index)}
+                                            {formData.investigatory_team.length > 1 && (
+                                                <button
+                                                    type="button"
                                                     className="remove-btn"
+                                                    onClick={() => removeTeamMember(index)}
                                                 >
                                                     ×
                                                 </button>
                                             )}
-                                            {index === newProject.investigatory_team.length - 1 && (
-                                                <button type="button" onClick={addTeamMember} className="add-btn">+</button>
-                                            )}
                                         </div>
                                     ))}
-                                </div>
-                                
-                                <div className="form-group full-width">
-                                    <label>Description</label>
-                                    <textarea
-                                        value={newProject.description}
-                                        onChange={(e) => setNewProject({...newProject, description: e.target.value})}
-                                        rows="3"
-                                        placeholder="Project description..."
-                                    />
+                                    <button
+                                        type="button"
+                                        className="add-btn"
+                                        onClick={addTeamMember}
+                                    >
+                                        +
+                                    </button>
                                 </div>
                             </div>
-                            
-                            <div className="modal-actions">
-                                <button type="button" onClick={() => setShowProjectForm(false)} className="btn-secondary">
-                                    Cancel
-                                </button>
-                                <button type="submit" className="btn-primary">
-                                    Create Project
+
+                            <div className="form-actions">
+                                <button 
+                                    type="submit" 
+                                    className="btn-primary"
+                                    disabled={loading}
+                                >
+                                    {loading ? 'Creating...' : 'Create Project'}
                                 </button>
                             </div>
                         </form>
                     </div>
+                )}
+
+                <div className="projects-grid">
+                    {projects.length === 0 ? (
+                        <div className="no-projects">
+                            <p>No projects found. Create your first project!</p>
+                        </div>
+                    ) : (
+                        projects.map(project => (
+                            <div key={project.id} className="project-card">
+                                <div className="project-header">
+                                    <h4>{project.name}</h4>
+                                    <span className={`status-badge ${project.status}`}>
+                                        {project.status}
+                                    </span>
+                                </div>
+                                <p className="project-description">{project.description}</p>
+                                <div className="project-details">
+                                    <div className="detail-item">
+                                        <strong>Team:</strong> {project.investigatory_team.join(', ')}
+                                    </div>
+                                    <div className="detail-item">
+                                        <strong>Started:</strong> {new Date(project.date_initialized).toLocaleDateString()}
+                                    </div>
+                                    {project.date_completed && (
+                                        <div className="detail-item">
+                                            <strong>Completed:</strong> {new Date(project.date_completed).toLocaleDateString()}
+                                        </div>
+                                    )}
+                                    <div className="detail-item">
+                                        <strong>Created:</strong> {new Date(project.created_at).toLocaleDateString()}
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    )}
                 </div>
-            )}
+            </div>
         </div>
     );
-}
+};
+
+export default ProjectManagement;

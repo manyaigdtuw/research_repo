@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, status
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, status, Form
 from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -13,15 +13,15 @@ from database import SessionLocal, engine
 from config import STORAGE_PATH
 from fastapi.middleware.cors import CORSMiddleware
 import time
-from typing import List
+from typing import List, Optional
 from datetime import datetime
+import json
 
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Research Repository")
 
 app.add_middleware(
     CORSMiddleware,
-    #allow_origins=["https://d01c81ac4b05.ngrok-free.app"],
     allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
@@ -111,61 +111,87 @@ def get_projects(skip: int = 0, limit: int = 100, db: Session = Depends(get_db))
 @app.post("/api/upload")
 async def upload_research_paper(
     file: UploadFile = File(...),
-    project_id: int = None,
+    title: str = Form(...),
+    authors: str = Form(...),
+    abstract: str = Form(""),
+    journal: str = Form(""),
+    publication_date: str = Form(""),
+    keywords: str = Form(""),
+    category: str = Form(...),
+    project_id: Optional[int] = None,  # <-- keep as query param
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Upload and process research paper"""
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Not authorized to upload papers")
-    
+
     if not file.filename.lower().endswith('.pdf'):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
-    
+
     try:
         # Save file
         os.makedirs(STORAGE_PATH, exist_ok=True)
         file_location = os.path.join(STORAGE_PATH, file.filename)
         with open(file_location, "wb") as f:
             shutil.copyfileobj(file.file, f)
-        
-        # Extract text and metadata
+
+        # Extract text for search indexing
         text_content = utils.pdf_to_text(file_location)
-        metadata = utils.extract_paper_metadata(text_content)
-        
+
+        # Parse JSON arrays from form data
+        try:
+            authors_list = json.loads(authors) if authors else []
+        except:
+            authors_list = [authors] if authors else []
+
+        try:
+            keywords_list = json.loads(keywords) if keywords else []
+        except:
+            keywords_list = [keywords] if keywords else []
+
+        # Parse publication date
+        pub_date = None
+        if publication_date:
+            try:
+                pub_date = datetime.fromisoformat(publication_date.replace('Z', '+00:00'))
+            except:
+                try:
+                    pub_date = datetime.strptime(publication_date, "%Y-%m-%d")
+                except:
+                    pub_date = None
+
         # Create paper record
         paper_data = schemas.ResearchPaperCreate(
             filename=file.filename,
-            title=metadata['title'] or file.filename.replace('.pdf', ''),
-            authors=metadata['authors'],
-            abstract=metadata['abstract'],
-            journal=metadata['journal'],
-            publication_date=metadata['publication_date'],
-            keywords=metadata['keywords'],
-            category=metadata.get('category', ''),
+            title=title,
+            authors=authors_list,
+            abstract=abstract,
+            journal=journal,
+            publication_date=pub_date,
+            keywords=keywords_list,
+            category=category,
             content=text_content,
-            project_id=project_id
+            project_id=project_id  # <-- query param used here
         )
-        
+
         db_paper = crud.create_research_paper(db, paper_data, current_user.id)
-        
-        # Add to vector index
+
+        # Add to search index
         chunks, embeddings = utils.add_paper_to_index(text_content, db_paper.id)
-        
-        # Update paper with chunks and embeddings
         db_paper.chunks = chunks
         db_paper.embeddings = embeddings
         db.commit()
-        
+
         return {
-            "message": "Research paper uploaded successfully", 
+            "message": "Research paper uploaded successfully",
             "paper_id": db_paper.id,
             "title": db_paper.title,
             "chunks_processed": len(chunks)
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
 
 # Public search endpoints (no authentication required)
 @app.get("/api/search")
@@ -208,11 +234,13 @@ def search_papers(query: str, top_k: int = 10, db: Session = Depends(get_db)):
                 query
             )
             
-            # Get project name
+            # Get project info
             project_name = None
+            project_status = None
             if paper.project_id:
                 project = crud.get_project_by_id(db, paper.project_id)
                 project_name = project.name if project else None
+                project_status = project.status if project else None
             
             formatted_results.append(schemas.SearchResult(
                 id=paper.id,
@@ -225,7 +253,8 @@ def search_papers(query: str, top_k: int = 10, db: Session = Depends(get_db)):
                 snippet=snippet,
                 similarity_score=result['score'],
                 filename=paper.filename,
-                project_name=project_name
+                project_name=project_name,
+                project_status=project_status  
             ))
         
         search_time = time.time() - start_time
@@ -291,7 +320,6 @@ async def download_paper(paper_id: int, db: Session = Depends(get_db)):
 def read_root():
     return {"message": "Research Repository API is running"}
 
-# main.py - Add this endpoint
 @app.get("/api/documents/search")
 def search_documents(query: str, top_k: int = 10, db: Session = Depends(get_db)):
     """Alternative search endpoint for compatibility"""

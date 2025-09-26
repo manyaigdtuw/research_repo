@@ -1,14 +1,15 @@
 import React from "react";
 
-export default function SearchResults({ results, query, loading, onDownload }) {
+export default function SearchResults({ results, query, loading, onDownload }){
     if (loading) {
-        return <div className="loading">Searching...</div>;
+        return <div className="loading">🔍 Searching through research papers...</div>;
     }
 
     if (!query) {
         return (
             <div className="search-placeholder">
-                <p>Enter a search query to find relevant research papers</p>
+                <p>🎯 Enter a search query to discover relevant research papers</p>
+                <p>💡 Try searching by topic, author, methodology, or research questions</p>
             </div>
         );
     }
@@ -16,12 +17,14 @@ export default function SearchResults({ results, query, loading, onDownload }) {
     if (results.length === 0 && query) {
         return (
             <div className="no-results">
-                <h3>No results found for "{query}"</h3>
+                <h3>❌ No results found for "{query}"</h3>
                 <p>Suggestions:</p>
                 <ul>
                     <li>Try using different keywords or phrases</li>
                     <li>Use more specific research terms</li>
                     <li>Check your spelling</li>
+                    <li>Try broader search terms</li>
+                    <li>Adjust your filters</li>
                 </ul>
             </div>
         );
@@ -34,10 +37,12 @@ export default function SearchResults({ results, query, loading, onDownload }) {
                     <thead>
                         <tr>
                             <th>Year</th>
-                            <th>Title</th>
+                            <th>Title & Details</th>
                             <th>Authors</th>
                             <th>Journal/Conference</th>
-                            <th>Relevance</th>
+                            <th>Category</th>
+                            <th>Project Name</th>
+                            <th>Project Status</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -61,6 +66,24 @@ export default function SearchResults({ results, query, loading, onDownload }) {
                                                 }
                                             </div>
                                         )}
+                                        <div className="paper-meta">
+                                            {result.category && (
+                                                <span className="meta-tag category">
+                                                    📁 {result.category}
+                                                </span>
+                                            )}
+                                            {result.publication_date && (
+                                                <span className="meta-tag">
+                                                    📅 {new Date(result.publication_date).toLocaleDateString()}
+                                                </span>
+                                            )}
+                                            {result.keywords && result.keywords.length > 0 && (
+                                                <span className="meta-tag">
+                                                    🔖 {result.keywords.slice(0, 2).join(', ')}
+                                                    {result.keywords.length > 2 && '...'}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                 </td>
                                 <td className="authors-column">
@@ -73,11 +96,25 @@ export default function SearchResults({ results, query, loading, onDownload }) {
                                 <td className="journal-column">
                                     {result.journal || 'N/A'}
                                 </td>
-                                <td className="relevance-column">
-                                    {result.similarity_score && (
-                                        <span className="similarity-badge">
-                                            {Math.round(result.similarity_score * 100)}%
+                                <td className="category-column">
+                                    {result.category ? (
+                                        <span className="category-badge">
+                                            {result.category}
                                         </span>
+                                    ) : (
+                                        'N/A'
+                                    )}
+                                </td>
+                                <td className="project-name-column">
+                                    {result.project_name || 'N/A'}
+                                </td>
+                                <td className="project-status-column">
+                                    {result.project_status ? (
+                                        <span className={`project-status ${result.project_status}`}>
+                                            {result.project_status}
+                                        </span>
+                                    ) : (
+                                        'N/A'
                                     )}
                                 </td>
                                 <td className="actions-column">

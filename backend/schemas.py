@@ -83,6 +83,7 @@ class SearchResult(BaseModel):
     similarity_score: float
     filename: str
     project_name: Optional[str] = None
+    project_status: Optional[str] = None 
 
 class SearchResponse(BaseModel):
     query: str
