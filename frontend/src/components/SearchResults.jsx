@@ -1,8 +1,8 @@
 import React from "react";
 
-export default function SearchResults({ results, query, loading, onDownload }){
+export default function SearchResults({ results, query, loading, onDownload }) {
     if (loading) {
-        return <div className="loading">Searching through research papers...</div>;
+        return <div className="loading">Searching through repository...</div>;
     }
 
     if (!query) {
@@ -30,6 +30,13 @@ export default function SearchResults({ results, query, loading, onDownload }){
         );
     }
 
+    const handleView = (paperId) => {
+    // Use the full backend API URL
+    const apiUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/download/${paperId}?view=true`;
+    window.open(apiUrl, '_blank', 'noopener,noreferrer');
+};
+
+
     return (
         <div className="search-results">
             <div className="results-table-container">
@@ -47,30 +54,26 @@ export default function SearchResults({ results, query, loading, onDownload }){
                         </tr>
                     </thead>
                     <tbody>
-                        {results.map((result, index) => (
+                        {results.map((result) => (
                             <tr key={result.id} className="result-row">
                                 <td className="year-column">
-                                    {result.publication_date 
+                                    {result.publication_date
                                         ? new Date(result.publication_date).getFullYear()
-                                        : 'N/A'
-                                    }
+                                        : "N/A"}
                                 </td>
                                 <td className="title-column">
                                     <div className="title-wrapper">
                                         <strong>{result.title}</strong>
                                         {result.abstract && (
                                             <div className="abstract-preview">
-                                                {result.abstract.length > 150 
+                                                {result.abstract.length > 150
                                                     ? result.abstract.substring(0, 150) + "..."
-                                                    : result.abstract
-                                                }
+                                                    : result.abstract}
                                             </div>
                                         )}
                                         <div className="paper-meta">
                                             {result.category && (
-                                                <span className="meta-tag category">
-                                                    {result.category}
-                                                </span>
+                                                <span className="meta-tag category">{result.category}</span>
                                             )}
                                             {result.publication_date && (
                                                 <span className="meta-tag">
@@ -79,52 +82,50 @@ export default function SearchResults({ results, query, loading, onDownload }){
                                             )}
                                             {result.keywords && result.keywords.length > 0 && (
                                                 <span className="meta-tag">
-                                                     {result.keywords.slice(0, 2).join(', ')}
-                                                    {result.keywords.length > 2 && '...'}
+                                                    {result.keywords.slice(0, 2).join(", ")}
+                                                    {result.keywords.length > 2 && "..."}
                                                 </span>
                                             )}
                                         </div>
                                     </div>
                                 </td>
                                 <td className="authors-column">
-                                    {result.authors && result.authors.length > 0 
-                                        ? result.authors.slice(0, 3).join(", ") + 
+                                    {result.authors && result.authors.length > 0
+                                        ? result.authors.slice(0, 3).join(", ") +
                                           (result.authors.length > 3 ? " et al." : "")
-                                        : "Authors not specified"
-                                    }
+                                        : "Authors not specified"}
                                 </td>
-                                <td className="journal-column">
-                                    {result.journal || 'N/A'}
-                                </td>
+                                <td className="journal-column">{result.journal || "N/A"}</td>
                                 <td className="category-column">
-                                    {result.category ? (
-                                        <span className="category-badge">
-                                            {result.category}
-                                        </span>
-                                    ) : (
-                                        'N/A'
-                                    )}
+                                    {result.category ? <span className="category-badge">{result.category}</span> : "N/A"}
                                 </td>
-                                <td className="project-name-column">
-                                    {result.project_name || 'N/A'}
-                                </td>
+                                <td className="project-name-column">{result.project_name || "N/A"}</td>
                                 <td className="project-status-column">
                                     {result.project_status ? (
                                         <span className={`project-status ${result.project_status}`}>
                                             {result.project_status}
                                         </span>
                                     ) : (
-                                        'N/A'
+                                        "N/A"
                                     )}
                                 </td>
                                 <td className="actions-column">
-                                    <button 
-                                        className="download-btn"
-                                        onClick={() => onDownload(result.id, result.filename)}
-                                        title="Download PDF"
-                                    >
-                                        Download
-                                    </button>
+                                    <div className="action-buttons">
+                                        <button
+                                            className="download-btn"
+                                            onClick={() => handleView(result.id)}
+                                            title="View PDF"
+                                        >
+                                            View
+                                        </button>
+                                        <button
+                                            className="download-btn"
+                                            onClick={() => onDownload(result.id, result.filename)}
+                                            title="Download PDF"
+                                        >
+                                            Download
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         ))}

@@ -4,6 +4,7 @@ from fastapi.responses import FileResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import shutil
 import os
+from fastapi import Query
 import models
 import schemas
 import crud
@@ -299,8 +300,12 @@ def delete_paper(
     return {"message": "Paper deleted successfully"}
 
 @app.get("/api/download/{paper_id}")
-async def download_paper(paper_id: int, db: Session = Depends(get_db)):
-    """Download research paper PDF"""
+async def download_paper(
+    paper_id: int,
+    db: Session = Depends(get_db),
+    view: bool = Query(False)  # <-- use Query for optional query parameters
+):
+    """Download or view research paper PDF"""
     paper = crud.get_research_paper(db, paper_id)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
@@ -310,11 +315,15 @@ async def download_paper(paper_id: int, db: Session = Depends(get_db)):
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     
+    disposition = "inline" if view else "attachment"
+    
     return FileResponse(
         path=file_path,
         filename=paper.filename,
-        media_type='application/pdf'
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"{disposition}; filename={paper.filename}"}
     )
+
 
 @app.get("/")
 def read_root():
