@@ -112,7 +112,7 @@ export default function SearchPage() {
                         onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                     />
                     <button onClick={handleSearch} disabled={loading}>
-                        {loading ? "🔍 Searching..." : "🚀 Search"}
+                        {loading ? "Searching..." : " Search"}
                     </button>
                 </div>
                 
@@ -150,7 +150,7 @@ export default function SearchPage() {
                             className="btn-secondary"
                             style={{alignSelf: 'flex-end', padding: '0.75rem 1rem'}}
                         >
-                            🗑️ Clear Filters
+                             Clear Filters
                         </button>
                     </div>
                 </div>
@@ -158,7 +158,7 @@ export default function SearchPage() {
 
             {searchStats && (
                 <div className="search-stats">
-                    🔍 Found {searchStats.count} results (filtered from {searchStats.total} total) in {searchStats.time.toFixed(2)} seconds
+                    Found {searchStats.count} results (filtered from {searchStats.total} total) in {searchStats.time.toFixed(2)} seconds
                 </div>
             )}
 

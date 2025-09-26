@@ -117,10 +117,6 @@ export default function AdminUploadPage() {
 
     return (
         <div className="admin-upload-page">
-            <div className="page-header">
-                <h2>Upload Research Document</h2>
-                <p>Manage research papers and associate them with projects</p>
-            </div>
 
             <div className="upload-container">
                 <form onSubmit={handleSubmit} className="upload-form">

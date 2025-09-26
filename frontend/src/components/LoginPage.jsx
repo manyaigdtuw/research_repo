@@ -27,8 +27,7 @@ export default function LoginPage() {
         <div className="login-page">
             <div className="login-container">
                 <div className="login-header">
-                    <h2>Admin Login</h2>
-                    <p>Access the research repository management system</p>
+                    <p>Log in to manage repository</p>
                 </div>
                 
                 <form onSubmit={handleSubmit} className="login-form">
@@ -41,7 +40,9 @@ export default function LoginPage() {
                             type="text"
                             value={credentials.username}
                             onChange={(e) => setCredentials({...credentials, username: e.target.value})}
+                            placeholder="Enter your username"
                             required
+                            disabled={loading}
                         />
                     </div>
                     
@@ -52,12 +53,14 @@ export default function LoginPage() {
                             type="password"
                             value={credentials.password}
                             onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+                            placeholder="Enter your password"
                             required
+                            disabled={loading}
                         />
                     </div>
                     
                     <button type="submit" disabled={loading}>
-                        {loading ? "Logging in..." : "Login"}
+                        {loading ? "Logging in..." : "Log In"}
                     </button>
                 </form>
             </div>

@@ -2,14 +2,14 @@ import React from "react";
 
 export default function SearchResults({ results, query, loading, onDownload }){
     if (loading) {
-        return <div className="loading">🔍 Searching through research papers...</div>;
+        return <div className="loading">Searching through research papers...</div>;
     }
 
     if (!query) {
         return (
             <div className="search-placeholder">
-                <p>🎯 Enter a search query to discover relevant research papers</p>
-                <p>💡 Try searching by topic, author, methodology, or research questions</p>
+                <p>Enter a search query to discover relevant research papers</p>
+                <p>Try searching by topic, author, methodology, or research questions</p>
             </div>
         );
     }
@@ -17,7 +17,7 @@ export default function SearchResults({ results, query, loading, onDownload }){
     if (results.length === 0 && query) {
         return (
             <div className="no-results">
-                <h3>❌ No results found for "{query}"</h3>
+                <h3>No results found for "{query}"</h3>
                 <p>Suggestions:</p>
                 <ul>
                     <li>Try using different keywords or phrases</li>
@@ -69,7 +69,7 @@ export default function SearchResults({ results, query, loading, onDownload }){
                                         <div className="paper-meta">
                                             {result.category && (
                                                 <span className="meta-tag category">
-                                                    📁 {result.category}
+                                                    {result.category}
                                                 </span>
                                             )}
                                             {result.publication_date && (
@@ -79,7 +79,7 @@ export default function SearchResults({ results, query, loading, onDownload }){
                                             )}
                                             {result.keywords && result.keywords.length > 0 && (
                                                 <span className="meta-tag">
-                                                    🔖 {result.keywords.slice(0, 2).join(', ')}
+                                                     {result.keywords.slice(0, 2).join(', ')}
                                                     {result.keywords.length > 2 && '...'}
                                                 </span>
                                             )}
@@ -123,7 +123,7 @@ export default function SearchResults({ results, query, loading, onDownload }){
                                         onClick={() => onDownload(result.id, result.filename)}
                                         title="Download PDF"
                                     >
-                                        📥 Download
+                                        Download
                                     </button>
                                 </td>
                             </tr>

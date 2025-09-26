@@ -120,10 +120,6 @@ const ProjectManagement = () => {
 
     return (
         <div className="project-management">
-            <div className="page-header">
-                <h2>Project Management</h2>
-                <p>Create and manage research projects</p>
-            </div>
 
             <div className="projects-section">
                 <div className="section-header">
