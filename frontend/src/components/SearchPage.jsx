@@ -45,7 +45,7 @@ export default function SearchPage() {
                         onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
                     />
                     <button onClick={handleSearch} disabled={loading}>
-                        {loading ? "🔍 Searching..." : "🔍 Search"}
+                        {loading ? "Searching..." : "Search"}
                     </button>
                 </div>
             </div>

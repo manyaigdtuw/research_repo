@@ -9,8 +9,7 @@ export default function SearchResults({ results, query, loading, onDownload }) {
     if (!query) {
         return (
             <div className="search-placeholder">
-                <h3>Research Paper Repository</h3>
-                <p>Enter a search query to find relevant research papers using semantic search.</p>
+                <p>Enter a search query to find relevant research papers</p>
             </div>
         );
     }

@@ -19,7 +19,8 @@ app = FastAPI(title="Research Repository")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["https://9364717f2ef5.ngrok-free.app/"],
+    #allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
