@@ -8,27 +8,33 @@ export default function SearchPage() {
     const [loading, setLoading] = useState(false);
     const [searchStats, setSearchStats] = useState(null);
 
-    const handleSearch = async () => {
-        if (!query.trim()) return;
+    // SearchPage.jsx - Update handleSearch function
+const handleSearch = async () => {
+    if (!query.trim()) return;
+    
+    setLoading(true);
+    setSearchStats(null);
+    try {
+        const startTime = performance.now();
+        const res = await searchPapers(query);
+        const endTime = performance.now();
         
-        setLoading(true);
-        setSearchStats(null);
-        try {
-            const startTime = performance.now();
-            const res = await searchPapers(query);
-            const endTime = performance.now();
-            
-            setResults(res.data.results);
-            setSearchStats({
-                time: res.data.search_time.toFixed(2),
-                count: res.data.total_count
-            });
-        } catch (error) {
-            console.error("Search failed:", error);
+        setResults(res.data.results);
+        setSearchStats({
+            time: res.data.search_time.toFixed(2),
+            count: res.data.total_count
+        });
+    } catch (error) {
+        console.error("Search failed:", error);
+        // More specific error message
+        if (error.response?.status === 404) {
+            alert("Search endpoint not found. Please check the server configuration.");
+        } else {
             alert("Search failed. Please try again.");
         }
-        setLoading(false);
-    };
+    }
+    setLoading(false);
+};
 
     const handleDownload = async (paperId, filename) => {
         try {
