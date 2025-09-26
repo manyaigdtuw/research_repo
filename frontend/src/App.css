@@ -378,7 +378,8 @@ body {
   background: linear-gradient(135deg, var(--accent-orange) 0%, #d97706 100%);
   color: white;
   border: none;
-  padding: 0.6rem 1rem;
+  padding: 0.5rem 1rem;
+  margin: 0.3rem;
   border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 0.85rem;

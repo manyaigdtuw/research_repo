@@ -117,7 +117,7 @@ export default function SearchPage() {
                 </div>
                 
                 <div className="filters-section">
-                    <h4>🔧 Filter Results</h4>
+                    <h4> Filter Results</h4>
                     <div className="filter-controls">
                         <div className="filter-group">
                             <label>Category</label>
