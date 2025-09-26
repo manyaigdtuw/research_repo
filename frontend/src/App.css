@@ -449,3 +449,122 @@ button:disabled {
         flex-direction: column;
     }
 }
+
+/* Table Styles */
+.results-table-container {
+    margin-top: 20px;
+    overflow-x: auto;
+}
+
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.results-table th {
+    background: #f8f9fa;
+    padding: 12px 15px;
+    text-align: left;
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.results-table td {
+    padding: 15px;
+    border-bottom: 1px solid #e9ecef;
+    vertical-align: top;
+}
+
+.results-table tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Column specific styles */
+.year-column {
+    width: 80px;
+    text-align: center;
+    font-weight: 600;
+    color: #6c757d;
+}
+
+.title-column {
+    min-width: 300px;
+}
+
+.title-wrapper strong {
+    color: #212529;
+    display: block;
+    margin-bottom: 5px;
+}
+
+.abstract-preview {
+    font-size: 0.9em;
+    color: #6c757d;
+    line-height: 1.4;
+}
+
+.authors-column {
+    min-width: 200px;
+    max-width: 250px;
+}
+
+.journal-column {
+    min-width: 200px;
+    max-width: 250px;
+}
+
+.relevance-column {
+    width: 100px;
+    text-align: center;
+}
+
+.actions-column {
+    width: 120px;
+    text-align: center;
+}
+
+.similarity-badge {
+    background: #28a745;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: 600;
+}
+
+.download-btn {
+    background: #007bff;
+    color: white;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85em;
+    transition: background 0.2s;
+}
+
+.download-btn:hover {
+    background: #0056b3;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .results-table-container {
+        font-size: 0.9em;
+    }
+    
+    .results-table th,
+    .results-table td {
+        padding: 8px 10px;
+    }
+    
+    .authors-column,
+    .journal-column {
+        display: none;
+    }
+}

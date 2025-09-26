@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { searchPapers } from "../api";
+import { searchPapers, downloadPaper } from "../api";
 import SearchResults from "./SearchResults";
 
 export default function SearchPage() {
@@ -30,6 +30,25 @@ export default function SearchPage() {
         setLoading(false);
     };
 
+    const handleDownload = async (paperId, filename) => {
+        try {
+            const response = await downloadPaper(paperId);
+            
+            // Create blob URL for download
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error("Download failed:", error);
+            alert("Download failed. Please try again.");
+        }
+    };
+
     return (
         <div className="search-page">
             <div className="portal-header">
@@ -56,7 +75,12 @@ export default function SearchPage() {
                 </div>
             )}
 
-            <SearchResults results={results} query={query} loading={loading} />
+            <SearchResults 
+                results={results} 
+                query={query} 
+                loading={loading} 
+                onDownload={handleDownload}
+            />
         </div>
     );
 }

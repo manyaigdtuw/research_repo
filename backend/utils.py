@@ -124,7 +124,7 @@ def get_embeddings_openrouter(texts: List[str]) -> List[List[float]]:
     return embeddings
 
 def extract_paper_metadata(text: str) -> Dict[str, Any]:
-    """Extract metadata from research paper text"""
+    """Extract metadata from research paper text with improved accuracy"""
     lines = [line.strip() for line in text.split('\n') if line.strip()]
     metadata = {
         'title': '',
@@ -135,65 +135,101 @@ def extract_paper_metadata(text: str) -> Dict[str, Any]:
         'keywords': []
     }
     
-    # Extract title (usually one of the first non-empty lines)
-    for i, line in enumerate(lines[:20]):  # Check first 20 lines
-        if (50 < len(line) < 300 and 
-            not line.startswith('Abstract') and 
-            not line.startswith('Keywords') and
-            not line.isupper() and
-            not any(word in line.lower() for word in ['received', 'accepted', 'vol.', 'pp.'])):
-            metadata['title'] = line
-            break
+    # Improved title extraction
+    title_candidates = []
+    for i, line in enumerate(lines[:30]):  # Check first 30 lines
+        line_length = len(line)
+        line_lower = line.lower()
+        
+        # Skip lines that are clearly not titles
+        if (line_length < 20 or line_length > 500 or
+            line_lower.startswith(('abstract', 'keywords', 'introduction', 'received', 'accepted', 'vol.', 'pp.', 'doi:')) or
+            line.isupper() or
+            any(indicator in line_lower for indicator in ['journal', 'proceedings', 'conference', 'university', 'email', '@'])):
+            continue
+            
+        title_candidates.append((line, i))
     
-    # Extract authors (look for patterns with commas, 'et al', or affiliations)
+    # Select the best title candidate (usually the first substantial line)
+    if title_candidates:
+        metadata['title'] = title_candidates[0][0]
+    
+    # Improved author extraction
+    author_patterns = [
+        r'([A-Z][a-zA-Z\-\']+\.?\s+[A-Z][a-zA-Z\-\']+(?:\s*,\s*[A-Z][a-zA-Z\-\']+\.?\s+[A-Z][a-zA-Z\-\']+)*)',
+        r'([A-Z]\.[A-Za-z\-\']+(?:\s+[A-Z]\.[A-Za-z\-\']+)*)'
+    ]
+    
     for i, line in enumerate(lines):
         line_lower = line.lower()
-        if ('et al' in line_lower or 
-            (',' in line and len(line) < 500 and 
-             any(indicator in line_lower for indicator in ['university', 'institute', 'department', 'college', '@']))):
-            # Clean up author line
-            authors = re.split(r',|\band\b|&', line)
-            authors = [author.strip() for author in authors if author.strip()]
-            metadata['authors'] = authors
-            break
+        if any(indicator in line_lower for indicator in ['et al', 'university', 'institute', 'department', 'college']):
+            for pattern in author_patterns:
+                matches = re.findall(pattern, line)
+                if matches:
+                    authors = []
+                    for match in matches:
+                        # Split by commas and clean up
+                        author_list = re.split(r',|\band\b|&', match)
+                        authors.extend([author.strip() for author in author_list if author.strip()])
+                    if authors:
+                        metadata['authors'] = authors
+                        break
+            if metadata['authors']:
+                break
     
-    # Extract abstract
+    # Improved abstract extraction
     abstract_start = -1
+    abstract_end = -1
+    
     for i, line in enumerate(lines):
-        if 'abstract' in line.lower():
+        line_lower = line.lower()
+        if 'abstract' in line_lower and abstract_start == -1:
             abstract_start = i + 1
+        elif abstract_start != -1 and (line_lower.startswith('keywords') or 
+                                      line_lower.startswith('1.') or 
+                                      line_lower.startswith('introduction') or
+                                      len(line) < 10):  # Very short line might indicate section end
+            abstract_end = i
             break
     
     if abstract_start != -1:
-        abstract_lines = []
-        for j in range(abstract_start, min(abstract_start + 15, len(lines))):
-            if (not lines[j].lower().startswith('keywords') and 
-                not lines[j].lower().startswith('1.') and 
-                not lines[j].lower().startswith('introduction')):
-                abstract_lines.append(lines[j])
-            else:
-                break
+        if abstract_end == -1:
+            abstract_end = min(abstract_start + 10, len(lines))
+        abstract_lines = lines[abstract_start:abstract_end]
         metadata['abstract'] = ' '.join(abstract_lines)
     
-    # Extract journal/conference info
-    for line in lines:
+    # Improved journal and year extraction
+    year_pattern = r'\b(19|20)\d{2}\b'
+    
+    for i, line in enumerate(lines):
         line_lower = line.lower()
+        
+        # Extract journal/conference
         if any(keyword in line_lower for keyword in ['journal', 'proceedings', 'conference', 'vol.', 'no.', 'pp.']):
             metadata['journal'] = line
-            break
+        
+        # Extract year
+        year_match = re.search(year_pattern, line)
+        if year_match:
+            metadata['publication_date'] = year_match.group()
+            # If we found a journal line, associate the year with it
+            if metadata['journal'] and not metadata['journal'].endswith(year_match.group()):
+                metadata['journal'] += f", {year_match.group()}"
     
-    # Extract year
-    year_match = re.search(r'\b(19|20)\d{2}\b', text)
-    if year_match:
-        metadata['publication_date'] = year_match.group()
+    # If no specific year found, search the entire text
+    if not metadata['publication_date']:
+        year_match = re.search(year_pattern, text)
+        if year_match:
+            metadata['publication_date'] = year_match.group()
     
     # Extract keywords
     for i, line in enumerate(lines):
         if 'keyword' in line.lower():
             if i + 1 < len(lines):
                 keyword_line = lines[i + 1]
-                keywords = re.split(r'[;,]', keyword_line)
-                metadata['keywords'] = [kw.strip() for kw in keywords if kw.strip()]
+                # More robust keyword splitting
+                keywords = re.split(r'[;,]|\s+and\s+', keyword_line)
+                metadata['keywords'] = [kw.strip() for kw in keywords if kw.strip() and len(kw.strip()) > 2]
             break
     
     return metadata
