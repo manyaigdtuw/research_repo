@@ -36,7 +36,7 @@ function Navigation() {
     return (
         <nav className="navbar">
             <div className="nav-brand">
-                <h1>Research Repository</h1>
+                <h3>CCRAS</h3>
                 <span className="tagline">Advanced Research Document Management</span>
             </div>
             <ul className="nav-links">
