@@ -47,11 +47,6 @@ Research Repository is a comprehensive web application designed for managing, se
 - PostgreSQL - Primary database  
 - JWT - Secure authentication  
 
-** AI & Search**
-- FAISS - Facebook's similarity search library  
-- OpenRouter API - Embedding generation and AI capabilities  
-- PyMuPDF - PDF text extraction  
-
 **Deployment & Infrastructure**
 - PostgreSQL - Data persistence  
 - File System Storage - Document storage management  
