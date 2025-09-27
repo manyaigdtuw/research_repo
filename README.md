@@ -143,36 +143,44 @@ research-repository/
 
 ## API Endpoints
 #### Authentication
+```bash
 POST /api/auth/register - User registration
 POST /api/auth/login - User login
 GET /api/auth/me - Get current user info
+```
 
 #### Projects
+```bash
 POST /api/projects - Create new project (Admin only)
 GET /api/projects - Get all projects
-
+```
 #### Research Papers
+```bash
 POST /api/upload - Upload research paper (Admin only)
 GET /api/search - Search papers
 GET /api/papers - Get all papers
 GET /api/papers/{id} - Get specific paper
 DELETE /api/papers/{id} - Delete paper (Admin only)
 GET /api/download/{id} - Download paper PDF
-
+```
 ## Usage Guide
 #### For Researchers
+```bash
 Search Papers: Use the search bar with natural language queries
 Filter Results: Use category and project filters to narrow results
 Download Papers: Click download button to get PDF copies
-
+```
 #### For Administrators
+```bash
 Login: Access admin features with admin account
 Upload Papers: Use the upload form to add new research papers
 Manage Projects: Create and organize research projects
 Manage Metadata: Add detailed metadata during upload
-
+```
 #### Upload Process
+```bash
 Fill in paper metadata (title, authors, abstract, etc.)
 Select appropriate category and project association
 Upload PDF file
 System automatically processes and indexes the content
+```
