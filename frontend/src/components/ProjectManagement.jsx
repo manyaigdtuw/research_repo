@@ -10,7 +10,7 @@ const ProjectManagement = () => {
         investigatory_team: [''],
         status: 'ongoing',
         date_initialized: new Date().toISOString().split('T')[0],
-        date_completed: ''
+        date_completed: null
     });
     const [loading, setLoading] = useState(false);
 
@@ -95,7 +95,7 @@ const ProjectManagement = () => {
             investigatory_team: [''],
             status: 'ongoing',
             date_initialized: new Date().toISOString().split('T')[0],
-            date_completed: ''
+            date_completed: null
         });
         fetchProjects();
         alert('Project created successfully!');

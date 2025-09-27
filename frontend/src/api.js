@@ -2,8 +2,8 @@
 // api.js
 import axios from "axios";
 
-//const API_BASE = "http://localhost:8000"; // Remove /api from base URL
-const API_BASE = "https://c84ece130d6d.ngrok-free.app";
+const API_BASE = "http://localhost:8000"; // Remove /api from base URL
+//const API_BASE = "https://c84ece130d6d.ngrok-free.app";
 
 
 // Create axios instance with interceptors
