@@ -29,7 +29,7 @@
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Source Sans Pro', 'Merriweather', sans-serif, serif;
   line-height: 1.6;
   color: var(--text-dark);
   background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
