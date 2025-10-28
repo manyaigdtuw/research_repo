@@ -3,33 +3,28 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL is not set in .env")
-
-
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:admin123@localhost:5432/research_db")
 STORAGE_PATH = os.getenv("STORAGE_PATH", "./storage/pdfs")
-FAISS_INDEX_PATH = os.getenv("FAISS_INDEX_PATH", "./embeddings/faiss_index.pkl")
+FAISS_INDEX_PATH = os.path.join(BASE_DIR, "embeddings", "faiss_index.bin")  # Changed from .pkl to .bin
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4")
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 500))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 50))
 
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-large")
-EMBEDDING_DIMENSION = int(os.getenv("EMBEDDING_DIMENSION", 3072))
-CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 1000))
-CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 100))
+# Medical Systems (enum values)
+MEDICAL_SYSTEMS = ["UNANI", "AYURVEDA", "YOGA", "SIDDHA"]
 
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-if not OPENROUTER_API_KEY:
-    raise ValueError("OPENROUTER_API_KEY is not set in .env")
+# Research Categories (enum values)
+RESEARCH_CATEGORIES = [
+    "CLINICAL_GRADE_A",
+    "CLINICAL_GRADE_B", 
+    "CLINICAL_GRADE_C",
+    "PRE_CLINICAL",
+    "FUNDAMENTAL",
+    "DRUG"
+]
 
-OPENROUTER_BASE_URL = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
-
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if not GEMINI_API_KEY:
-    raise ValueError("GEMINI_API_KEY is not set in .env")
-
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-if not JWT_SECRET_KEY:
-    raise ValueError("JWT_SECRET_KEY is not set in .env")
-
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+# Project Status (enum values)
+PROJECT_STATUS = ["ONGOING", "COMPLETED", "TERMINATED"]

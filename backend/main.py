@@ -1,21 +1,16 @@
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, status, Form
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Form
 from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import shutil
-import os
-from fastapi import Query
+from fastapi.middleware.cors import CORSMiddleware
+import shutil, os
 import models
 import schemas
 import crud
-import auth
+import database
 import utils
 from database import SessionLocal, engine
-from config import STORAGE_PATH
-from fastapi.middleware.cors import CORSMiddleware
-import time
-from typing import List, Optional
-from datetime import datetime
+from config import STORAGE_PATH, MEDICAL_SYSTEMS, RESEARCH_CATEGORIES, PROJECT_STATUS
+from typing import Optional
 import json
 
 models.Base.metadata.create_all(bind=engine)
@@ -23,14 +18,11 @@ app = FastAPI(title="Research Repository")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    #allow_origins=["https://c84ece130d6d.ngrok-free.app"],
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-security = HTTPBearer()
 
 def get_db():
     db = SessionLocal()
@@ -39,298 +31,355 @@ def get_db():
     finally:
         db.close()
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
-    token = credentials.credentials
-    payload = auth.verify_token(token)
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    username: str = payload.get("sub")
-    if username is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-        )
-    user = crud.get_user_by_username(db, username=username)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-        )
-    return user
-
-# Authentication endpoints
-@app.post("/api/auth/register")
-def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
-    db_user = crud.get_user_by_username(db, username=user.username)
-    if db_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
-    return crud.create_user(db=db, user=user)
-
-@app.post("/api/auth/login")
-def login(form_data: schemas.UserLogin, db: Session = Depends(get_db)):
-    user = crud.get_user_by_username(db, username=form_data.username)
-    if not user or not crud.verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect username or password")
-    
-    access_token = auth.create_access_token(data={"sub": user.username})
-    return {"access_token": access_token, "token_type": "bearer", "is_admin": user.is_admin}
-
-@app.get("/api/auth/me")
-def get_current_user_info(current_user: models.User = Depends(get_current_user)):
+@app.get("/api/debug/faiss-status")
+def debug_faiss_status():
+    """Debug endpoint to check FAISS index status"""
+    total_vectors = utils.faiss_index.ntotal
     return {
-        "username": current_user.username,
-        "email": current_user.email,
-        "is_admin": current_user.is_admin,
-        "is_active": current_user.is_active
+        "total_vectors": total_vectors,
+        "index_file_exists": os.path.exists(utils.FAISS_INDEX_PATH),
+        "index_path": utils.FAISS_INDEX_PATH
     }
 
-# Project endpoints
-@app.post("/api/projects", response_model=schemas.Project)
-def create_project(
-    project: schemas.ProjectCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Not authorized to create projects")
-    
-    db_project = crud.get_project_by_name(db, name=project.name)
-    if db_project:
-        raise HTTPException(status_code=400, detail="Project name already exists")
-    
-    return crud.create_project(db=db, project=project, user_id=current_user.id)
+@app.get("/api/debug/documents")
+def debug_documents(db: Session = Depends(get_db)):
+    """Debug endpoint to list all documents"""
+    documents = db.query(models.Document).all()
+    return [{
+        "id": doc.id,
+        "filename": doc.filename,
+        "title": doc.article_title or doc.project_title,
+        "content_length": len(doc.content) if doc.content else 0,
+        "medical_system": doc.medical_system.value if doc.medical_system else None,
+        "research_category": doc.research_category.value if doc.research_category else None
+    } for doc in documents]
 
-@app.get("/api/projects", response_model=List[schemas.Project])
-def get_projects(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    projects = crud.get_projects(db, skip=skip, limit=limit)
-    return projects
-
-# Research paper endpoints (protected)
 @app.post("/api/upload")
-async def upload_research_paper(
+async def upload_document(
+    # Medical System and Research Category (required)
+    medical_system: str = Form(...),
+    research_category: str = Form(...),
+    
+    # Project Details (optional)
+    project_title: Optional[str] = Form(None),
+    start_year: Optional[int] = Form(None),
+    end_year: Optional[int] = Form(None),
+    institution: Optional[str] = Form(None),
+    investigator_name: Optional[str] = Form(None),
+    sanction_date: Optional[str] = Form(None),
+    project_status: str = Form("ONGOING"),
+    
+    # Publication Details (optional)
+    article_title: Optional[str] = Form(None),
+    publication_year: Optional[int] = Form(None),
+    authors: Optional[str] = Form(None),
+    journal_name: Optional[str] = Form(None),
+    
+    # Research Details (optional)
+    objectives: Optional[str] = Form(None),
+    study_protocol: Optional[str] = Form(None),
+    outcomes: Optional[str] = Form(None),
+    
     file: UploadFile = File(...),
-    title: str = Form(...),
-    authors: str = Form(...),
-    abstract: str = Form(""),
-    journal: str = Form(""),
-    publication_date: str = Form(""),
-    keywords: str = Form(""),
-    category: str = Form(...),
-    project_id: Optional[int] = None,  # <-- keep as query param
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+    db: Session = Depends(get_db)
 ):
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Not authorized to upload papers")
+    # Save file
+    file_location = os.path.join(STORAGE_PATH, file.filename)
+    with open(file_location, "wb") as f:
+        shutil.copyfileobj(file.file, f)
 
-    if not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    # Extract text from PDF
+    text_content = utils.pdf_to_text(file_location)
+    
+    # Extract metadata
+    extracted_metadata = utils.extract_metadata_from_text(text_content)
+    
+    # Create document with all metadata
+    doc_data = schemas.DocumentCreate(
+        filename=file.filename,
+        content=text_content,
+        extracted_data=extracted_metadata,
+        
+        # Medical System and Research Category
+        medical_system=medical_system,
+        research_category=research_category,
+        
+        # Project Details
+        project_title=project_title,
+        start_year=start_year,
+        end_year=end_year,
+        institution=institution,
+        investigator_name=investigator_name,
+        sanction_date=sanction_date,
+        project_status=project_status,
+        
+        # Publication Details
+        article_title=article_title or extracted_metadata.get('title'),
+        publication_year=publication_year or extracted_metadata.get('year'),
+        authors=authors or extracted_metadata.get('authors'),
+        journal_name=journal_name or extracted_metadata.get('journal'),
+        
+        # Research Details
+        objectives=objectives,
+        study_protocol=study_protocol,
+        outcomes=outcomes
+    )
+    
+    db_doc = crud.create_document(db, doc_data)
 
-    try:
-        # Save file
-        os.makedirs(STORAGE_PATH, exist_ok=True)
-        file_location = os.path.join(STORAGE_PATH, file.filename)
-        with open(file_location, "wb") as f:
-            shutil.copyfileobj(file.file, f)
+    # Add to FAISS for semantic search
+    utils.add_to_faiss([text_content], [db_doc.id])
+    
+    # Also store embedding in database
+    utils.add_document_embedding(db, db_doc.id, text_content)
+    
+    return {
+        "message": "Document uploaded successfully", 
+        "doc_id": db_doc.id,
+        "extracted_metadata": extracted_metadata
+    }
 
-        # Extract text for search indexing
-        text_content = utils.pdf_to_text(file_location)
-
-        # Parse JSON arrays from form data
-        try:
-            authors_list = json.loads(authors) if authors else []
-        except:
-            authors_list = [authors] if authors else []
-
-        try:
-            keywords_list = json.loads(keywords) if keywords else []
-        except:
-            keywords_list = [keywords] if keywords else []
-
-        # Parse publication date
-        pub_date = None
-        if publication_date:
-            try:
-                pub_date = datetime.fromisoformat(publication_date.replace('Z', '+00:00'))
-            except:
-                try:
-                    pub_date = datetime.strptime(publication_date, "%Y-%m-%d")
-                except:
-                    pub_date = None
-
-        # Create paper record
-        paper_data = schemas.ResearchPaperCreate(
-            filename=file.filename,
-            title=title,
-            authors=authors_list,
-            abstract=abstract,
-            journal=journal,
-            publication_date=pub_date,
-            keywords=keywords_list,
-            category=category,
-            content=text_content,
-            project_id=project_id  # <-- query param used here
-        )
-
-        db_paper = crud.create_research_paper(db, paper_data, current_user.id)
-
-        # Add to search index
-        chunks, embeddings = utils.add_paper_to_index(text_content, db_paper.id)
-        db_paper.chunks = chunks
-        db_paper.embeddings = embeddings
-        db.commit()
-
-        return {
-            "message": "Research paper uploaded successfully",
-            "paper_id": db_paper.id,
-            "title": db_paper.title,
-            "chunks_processed": len(chunks)
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
-
-
-# Public search endpoints (no authentication required)
 @app.get("/api/search")
-def search_papers(query: str, top_k: int = 10, db: Session = Depends(get_db)):
-    """Search papers using hybrid search"""
-    start_time = time.time()
-    
-    if not query.strip():
-        return schemas.SearchResponse(
-            query=query,
-            results=[],
-            total_count=0,
-            search_time=0.0
-        )
-    
-    try:
-        # Get all papers for hybrid search
-        all_papers = crud.get_all_research_papers(db)
-        
-        if not all_papers:
-            return schemas.SearchResponse(
-                query=query,
-                results=[],
-                total_count=0,
-                search_time=0.0
-            )
-        
-        # Perform hybrid search
-        search_results = utils.hybrid_search(query, all_papers, top_k)
-        
-        # Format results
-        formatted_results = []
-        for result in search_results:
-            paper = result['paper']
-            chunk_index = result['chunk_index']
-            
-            # Get relevant snippet
-            snippet = utils.get_relevant_snippet(
-                paper.chunks[chunk_index] if paper.chunks and chunk_index < len(paper.chunks) else paper.content,
-                query
-            )
-            
-            # Get project info
-            project_name = None
-            project_status = None
-            if paper.project_id:
-                project = crud.get_project_by_id(db, paper.project_id)
-                project_name = project.name if project else None
-                project_status = project.status if project else None
-            
-            formatted_results.append(schemas.SearchResult(
-                id=paper.id,
-                title=paper.title or paper.filename,
-                authors=paper.authors or [],
-                abstract=paper.abstract or "",
-                journal=paper.journal,
-                publication_date=paper.publication_date,
-                category=paper.category,
-                snippet=snippet,
-                similarity_score=result['score'],
-                filename=paper.filename,
-                project_name=project_name,
-                project_status=project_status  
-            ))
-        
-        search_time = time.time() - start_time
-        
-        return schemas.SearchResponse(
-            query=query,
-            results=formatted_results,
-            total_count=len(formatted_results),
-            search_time=search_time
-        )
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
-
-@app.get("/api/papers")
-def get_all_papers(db: Session = Depends(get_db)):
-    """Get all research papers"""
-    papers = crud.get_all_research_papers(db)
-    return papers
-
-@app.get("/api/papers/{paper_id}")
-def get_paper(paper_id: int, db: Session = Depends(get_db)):
-    """Get specific paper details"""
-    paper = crud.get_research_paper(db, paper_id)
-    if not paper:
-        raise HTTPException(status_code=404, detail="Paper not found")
-    return paper
-
-@app.delete("/api/papers/{paper_id}")
-def delete_paper(
-    paper_id: int, 
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
+def search_documents(
+    query: Optional[str] = None,
+    medical_system: Optional[str] = None,
+    research_category: Optional[str] = None,
+    institution: Optional[str] = None,
+    author: Optional[str] = None,
+    journal: Optional[str] = None,
+    year_from: Optional[int] = None,
+    year_to: Optional[int] = None,
+    project_status: Optional[str] = None,
+    investigator: Optional[str] = None,
+    db: Session = Depends(get_db)
 ):
-    """Delete research paper"""
-    if not current_user.is_admin:
-        raise HTTPException(status_code=403, detail="Not authorized to delete papers")
+    print(f"🔍 [SEARCH DEBUG] Received search request:")
+    print(f"   Query: '{query}'")
+    print(f"   Medical System: {medical_system}")
+    print(f"   Research Category: {research_category}")
+    print(f"   Institution: {institution}")
+    print(f"   Author: {author}")
+    print(f"   Journal: {journal}")
+    print(f"   Year Range: {year_from}-{year_to}")
+    print(f"   Project Status: {project_status}")
+    print(f"   Investigator: {investigator}")
     
-    success = crud.delete_research_paper(db, paper_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Paper not found")
-    return {"message": "Paper deleted successfully"}
+    # Check FAISS status
+    print(f"   FAISS Total Vectors: {utils.faiss_index.ntotal}")
+    
+    # Base query
+    results_query = db.query(models.Document)
+    
+    # Apply filters
+    if medical_system:
+        results_query = results_query.filter(models.Document.medical_system == medical_system)
+    if research_category:
+        results_query = results_query.filter(models.Document.research_category == research_category)
+    if institution:
+        results_query = results_query.filter(models.Document.institution.ilike(f"%{institution}%"))
+    if author:
+        results_query = results_query.filter(models.Document.authors.ilike(f"%{author}%"))
+    if journal:
+        results_query = results_query.filter(models.Document.journal_name.ilike(f"%{journal}%"))
+    if year_from:
+        results_query = results_query.filter(models.Document.publication_year >= year_from)
+    if year_to:
+        results_query = results_query.filter(models.Document.publication_year <= year_to)
+    if project_status:
+        results_query = results_query.filter(models.Document.project_status == project_status)
+    if investigator:
+        results_query = results_query.filter(models.Document.investigator_name.ilike(f"%{investigator}%"))
+    
+    # If there's a search query, use semantic search
+    indices = []
+    if query and query.strip():
+        print(f"🎯 [SEARCH] Performing semantic search for: '{query}'")
+        indices = utils.semantic_search(query.strip())
+        print(f"📊 [SEARCH] Semantic search returned {len(indices)} results: {indices}")
+        
+        if indices:
+            results_query = results_query.filter(models.Document.id.in_(indices))
+        else:
+            # No semantic results found
+            print("❌ [SEARCH] No semantic results found")
+            return []
+    else:
+        print("ℹ️ [SEARCH] No query provided, using filtered search only")
+    
+    # Execute the query
+    results = results_query.all()
+    print(f"✅ [SEARCH] Database query returned {len(results)} results")
+    
+    # If we have semantic search results, maintain their order
+    if query and query.strip() and indices:
+        results_dict = {doc.id: doc for doc in results}
+        ordered_results = [results_dict[idx] for idx in indices if idx in results_dict]
+        print(f"📋 [SEARCH] Ordered results: {[doc.id for doc in ordered_results]}")
+    else:
+        ordered_results = results
+    
+    medical_system_labels = {
+        'UNANI': 'Unani',
+        'AYURVEDA': 'Ayurveda', 
+        'YOGA': 'Yoga',
+        'SIDDHA': 'Siddha'
+    }
+    
+    research_category_labels = {
+        'CLINICAL_GRADE_A': 'Clinical Research Grade A',
+        'CLINICAL_GRADE_B': 'Clinical Research Evidence Grade B',
+        'CLINICAL_GRADE_C': 'Clinical Research Evidence Grade C', 
+        'PRE_CLINICAL': 'Pre Clinical Research',
+        'FUNDAMENTAL': 'Fundamental Research',
+        'DRUG': 'Drug Research'
+    }
+    
+    project_status_labels = {
+        'ONGOING': 'Ongoing',
+        'COMPLETED': 'Completed',
+        'TERMINATED': 'Terminated'
+    }
 
-@app.get("/api/download/{paper_id}")
-async def download_paper(
-    paper_id: int,
-    db: Session = Depends(get_db),
-    view: bool = Query(False)  # <-- use Query for optional query parameters
-):
-    """Download or view research paper PDF"""
-    paper = crud.get_research_paper(db, paper_id)
-    if not paper:
-        raise HTTPException(status_code=404, detail="Paper not found")
+    formatted_results = [{
+        "id": d.id,
+        "filename": d.filename,
+        "title": d.article_title or d.project_title or d.filename.replace('.pdf', ''),
+        "authors": d.authors or "Unknown Authors",
+        "journal": d.journal_name or "Unknown Publication",
+        "year": d.publication_year,
+        "medical_system": medical_system_labels.get(d.medical_system.value, d.medical_system.value),
+        "research_category": research_category_labels.get(d.research_category.value, d.research_category.value),
+        "institution": d.institution,
+        "project_status": project_status_labels.get(d.project_status.value, d.project_status.value),
+        "investigator": d.investigator_name,
+        "project_title": d.project_title,
+        "start_year": d.start_year,
+        "end_year": d.end_year,
+        "snippet": get_relevant_snippet(d.content, query) if query else (d.content[:300] + "..." if len(d.content) > 300 else d.content),
+        "objectives": d.objectives,
+        "study_protocol": d.study_protocol,
+        "outcomes": d.outcomes,
+        "created_at": d.created_at.isoformat() if d.created_at else None
+    } for d in ordered_results]
     
-    file_path = os.path.join(STORAGE_PATH, paper.filename)
+    print(f"🎉 [SEARCH] Returning {len(formatted_results)} formatted results")
+    return formatted_results
+
+
+@app.get("/api/filters/options")
+def get_filter_options(db: Session = Depends(get_db)):
+    """Get available options for filters"""
+    institutions = db.query(models.Document.institution).distinct().all()
+    authors = db.query(models.Document.authors).distinct().all()
+    journals = db.query(models.Document.journal_name).distinct().all()
+    investigators = db.query(models.Document.investigator_name).distinct().all()
+    
+    # Return the enum values (not display names)
+    return {
+        "medical_systems": [ms.value for ms in models.MedicalSystem],
+        "research_categories": [rc.value for rc in models.ResearchCategory],
+        "project_status": [ps.value for ps in models.ProjectStatus],
+        "institutions": [inst[0] for inst in institutions if inst[0]],
+        "authors": [auth[0] for auth in authors if auth[0]],
+        "journals": [jour[0] for jour in journals if jour[0]],
+        "investigators": [inv[0] for inv in investigators if inv[0]]
+    }
+
+@app.get("/api/browse")
+def browse_documents(db: Session = Depends(get_db)):
+    documents = crud.get_documents(db)
+    result = []
+
+    for d in documents:
+        result.append({
+            "id": d.id,
+            "filename": d.filename,
+            "title": d.article_title or d.project_title or d.filename.replace(".pdf", ""),
+            "authors": d.authors or "Unknown Authors",
+            "journal": d.journal_name or "Unknown Journal",
+            "publication_year": d.publication_year,
+            "medical_system": d.medical_system.value if hasattr(d.medical_system, "value") else d.medical_system,
+            "research_category": d.research_category.value if hasattr(d.research_category, "value") else d.research_category,
+            "project_status": d.project_status.value if hasattr(d.project_status, "value") else d.project_status,
+            "institution": d.institution,
+            "investigator_name": d.investigator_name,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+        })
+
+    return result
+
+
+@app.get("/api/download/{document_id}")
+async def download_document(document_id: int, db: Session = Depends(get_db)):
+    document = db.query(models.Document).filter(models.Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    file_path = os.path.join(STORAGE_PATH, document.filename)
     
     if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="File not found")
-    
-    disposition = "inline" if view else "attachment"
+        raise HTTPException(status_code=404, detail="File not found on server")
     
     return FileResponse(
         path=file_path,
-        filename=paper.filename,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"{disposition}; filename={paper.filename}"}
+        filename=document.filename,
+        media_type='application/pdf'
     )
 
+def get_relevant_snippet(content: str, query: str, max_length: int = 300) -> str:
+    if not content or not query:
+        return (content[:max_length] + "...") if len(content) > max_length else content
+    
+    content_lower = content.lower()
+    query_lower = query.lower()
+    query_terms = [term for term in query_lower.split() if len(term) > 2]
+    
+    if not query_terms:
+        return content[:max_length] + "..." if len(content) > max_length else content
+    
+    best_position = -1
+    best_term = ""
+    
+    for term in query_terms:
+        pos = content_lower.find(term)
+        if pos != -1 and (best_position == -1 or pos < best_position):
+            best_position = pos
+            best_term = term
+    
+    if best_position != -1:
+        context_size = 100
+        start = max(0, best_position - context_size)
+        end = min(len(content), best_position + len(best_term) + context_size)
+        
+        snippet = content[start:end]
+        
+        if start > 0:
+            snippet = "..." + snippet
+        if end < len(content):
+            snippet = snippet + "..."
+            
+        return snippet
+    
+    sections = ['abstract', 'introduction', 'conclusion', 'summary']
+    for section in sections:
+        section_pos = content_lower.find(section)
+        if section_pos != -1:
+            start = max(0, section_pos)
+            end = min(len(content), start + max_length)
+            snippet = content[start:end]
+            if start > 0:
+                snippet = "..." + snippet
+            if end < len(content):
+                snippet = snippet + "..."
+            return snippet
+    
+    return content[:max_length] + "..." if len(content) > max_length else content
 
-@app.get("/")
-def read_root():
-    return {"message": "Research Repository API is running"}
-
-@app.get("/api/documents/search")
-def search_documents(query: str, top_k: int = 10, db: Session = Depends(get_db)):
-    """Alternative search endpoint for compatibility"""
-    return search_papers(query, top_k, db)
+@app.post("/api/rebuild-index")
+def rebuild_faiss_index(db: Session = Depends(get_db)):
+    """Rebuild FAISS index from all documents in database"""
+    try:
+        utils.rebuild_faiss_from_database()
+        return {"message": "FAISS index rebuilt successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error rebuilding index: {str(e)}")

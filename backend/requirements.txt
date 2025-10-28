@@ -11,3 +11,5 @@ numpy==1.24.3
 email-validator
 passlib[bcrypt]
 python-jose[cryptography]
+beautifulsoup4==4.12.2
+pgvector

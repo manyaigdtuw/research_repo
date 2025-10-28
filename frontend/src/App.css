@@ -1133,3 +1133,63 @@ body {
     font-size: 1.75rem;
   }
 }
+
+/* Upload Type Selector */
+.upload-type-selector {
+    display: flex;
+    gap: 2rem;
+}
+
+.upload-type-selector label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.upload-type-selector input[type="radio"] {
+    margin: 0;
+}
+
+/* URL Input Group */
+.url-input-group {
+    display: flex;
+    gap: 1rem;
+}
+
+.url-input-group input {
+    flex: 1;
+}
+
+.url-input-group button {
+    white-space: nowrap;
+}
+
+/* Checkbox Label */
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    margin: 0;
+}
+
+/* Form Improvements */
+.form-row {
+    display: flex;
+    gap: 1.5rem;
+}
+
+.form-row .form-group {
+    flex: 1;
+}
+
+small {
+    color: var(--text-light);
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+    display: block;
+}

@@ -1,394 +1,195 @@
 import os
-import fitz  # PyMuPDF
+import fitz
 import faiss
 import numpy as np
-import pickle
+from sentence_transformers import SentenceTransformer
+from database import SessionLocal
+import models
+from contextlib import contextmanager
 import re
-import requests
-import json
-from typing import List, Dict, Any, Optional
-from config import STORAGE_PATH, FAISS_INDEX_PATH, EMBEDDING_MODEL, CHUNK_SIZE, CHUNK_OVERLAP, OPENROUTER_API_KEY, OPENROUTER_BASE_URL, EMBEDDING_DIMENSION
+from datetime import datetime
+from config import STORAGE_PATH, FAISS_INDEX_PATH, EMBEDDING_MODEL, CHUNK_SIZE, CHUNK_OVERLAP
 
-# Load or initialize FAISS index
-def initialize_faiss_index(dimension: int = EMBEDDING_DIMENSION):
-    """Initialize or load FAISS index with proper dimension"""
-    if os.path.exists(FAISS_INDEX_PATH):
-        try:
-            with open(FAISS_INDEX_PATH, "rb") as f:
-                index = pickle.load(f)
-            # Verify dimension matches
-            if index.d == dimension:
-                return index
-            else:
-                print(f"Dimension mismatch: expected {dimension}, got {index.d}. Creating new index.")
-        except Exception as e:
-            print(f"Error loading FAISS index: {e}. Creating new index.")
-    
-    # Create new index
-    index = faiss.IndexFlatL2(dimension)
-    print(f"Created new FAISS index with dimension {dimension}")
-    return index
+# Ensure storage directory exists
+os.makedirs(STORAGE_PATH, exist_ok=True)
+os.makedirs(os.path.dirname(FAISS_INDEX_PATH), exist_ok=True)
 
-# Initialize FAISS index
-faiss_index = initialize_faiss_index()
+# Load embedding model
+embed_model = SentenceTransformer(EMBEDDING_MODEL)
+dim = embed_model.get_sentence_embedding_dimension()
+
+print(f"[UTILS] Embedding model loaded: {EMBEDDING_MODEL}")
+print(f"[UTILS] Embedding dimension: {dim}")
+print(f"[UTILS] FAISS index path: {FAISS_INDEX_PATH}")
+
+# ✅ Initialize FAISS index (cosine similarity using inner product)
+if os.path.exists(FAISS_INDEX_PATH):
+    try:
+        faiss_index = faiss.read_index(FAISS_INDEX_PATH)
+        print(f"[FAISS] ✅ Loaded existing index with {faiss_index.ntotal} vectors from {FAISS_INDEX_PATH}")
+    except Exception as e:
+        print(f"[FAISS] ❌ Corrupted index file, reinitializing. Error: {e}")
+        faiss_index = faiss.IndexIDMap(faiss.IndexFlatIP(dim))
+else:
+    faiss_index = faiss.IndexIDMap(faiss.IndexFlatIP(dim))
+    print("[FAISS] 🔧 Created new empty index.")
+
+@contextmanager
+def get_db_session():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 def pdf_to_text(pdf_path: str) -> str:
-    """Extract text from PDF"""
+    """Extract text from a PDF using PyMuPDF (fitz)."""
     text = ""
-    try:
-        doc = fitz.open(pdf_path)
-        for page in doc:
-            text += page.get_text() + "\n"
-        doc.close()
-    except Exception as e:
-        print(f"Error reading PDF: {e}")
-        raise
+    doc = fitz.open(pdf_path)
+    for page in doc:
+        text += page.get_text() + "\n"
+    doc.close()
     return text
 
-def chunk_text(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> List[str]:
-    """Split text into overlapping chunks"""
-    if not text or len(text.strip()) == 0:
-        return []
-        
-    chunks = []
-    start = 0
-    text_length = len(text)
-    
-    while start < text_length:
-        end = min(start + size, text_length)
-        chunk = text[start:end].strip()
-        
-        if chunk:  # Only add non-empty chunks
-            chunks.append(chunk)
-            
-        start += size - overlap
-        
-        # Break if we're not making progress
-        if start >= text_length or (chunks and start <= chunks[-1].start):
-            break
-            
-    return chunks
+def extract_metadata_from_text(text: str) -> dict:
+    """Heuristically extract metadata from PDF text."""
+    metadata = {}
+    lines = text.split('\n')
 
-def get_embeddings_openrouter(texts: List[str]) -> List[List[float]]:
-    """Get embeddings using OpenRouter API"""
-    if not OPENROUTER_API_KEY:
-        raise ValueError("OpenRouter API key not configured")
-    
-    if not texts:
-        return []
-    
-    embeddings = []
-    
-    # Process in batches to avoid rate limits
-    batch_size = 10  # Adjust based on API limits
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i + batch_size]
-        
-        try:
-            response = requests.post(
-                f"{OPENROUTER_BASE_URL}/embeddings",
-                headers={
-                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "http://localhost:3000",  # Required by OpenRouter
-                    "X-Title": "Research Repository"  # Required by OpenRouter
-                },
-                json={
-                    "model": EMBEDDING_MODEL,
-                    "input": batch
-                },
-                timeout=30  # 30 second timeout
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                batch_embeddings = [item['embedding'] for item in data['data']]
-                embeddings.extend(batch_embeddings)
-                print(f"Successfully processed batch {i//batch_size + 1}")
-            else:
-                print(f"OpenRouter API error: {response.status_code} - {response.text}")
-                # Fallback: return zero vectors
-                fallback_embedding = [0.0] * EMBEDDING_DIMENSION
-                embeddings.extend([fallback_embedding] * len(batch))
-                
-        except requests.exceptions.RequestException as e:
-            print(f"Request error: {e}")
-            # Fallback: return zero vectors
-            fallback_embedding = [0.0] * EMBEDDING_DIMENSION
-            embeddings.extend([fallback_embedding] * len(batch))
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-            fallback_embedding = [0.0] * EMBEDDING_DIMENSION
-            embeddings.extend([fallback_embedding] * len(batch))
-    
-    return embeddings
-
-def extract_paper_metadata(text: str) -> Dict[str, Any]:
-    """Extract metadata from research paper text with improved accuracy"""
-    lines = [line.strip() for line in text.split('\n') if line.strip()]
-    metadata = {
-        'title': '',
-        'authors': [],
-        'abstract': '',
-        'journal': '',
-        'publication_date': None,
-        'keywords': []
-    }
-    
-    # Improved title extraction
-    title_candidates = []
-    for i, line in enumerate(lines[:30]):  # Check first 30 lines
-        line_length = len(line)
-        line_lower = line.lower()
-        
-        # Skip lines that are clearly not titles
-        if (line_length < 20 or line_length > 500 or
-            line_lower.startswith(('abstract', 'keywords', 'introduction', 'received', 'accepted', 'vol.', 'pp.', 'doi:')) or
-            line.isupper() or
-            any(indicator in line_lower for indicator in ['journal', 'proceedings', 'conference', 'university', 'email', '@'])):
-            continue
-            
-        title_candidates.append((line, i))
-    
-    # Select the best title candidate (usually the first substantial line)
-    if title_candidates:
-        metadata['title'] = title_candidates[0][0]
-    
-    # Improved author extraction
-    author_patterns = [
-        r'([A-Z][a-zA-Z\-\']+\.?\s+[A-Z][a-zA-Z\-\']+(?:\s*,\s*[A-Z][a-zA-Z\-\']+\.?\s+[A-Z][a-zA-Z\-\']+)*)',
-        r'([A-Z]\.[A-Za-z\-\']+(?:\s+[A-Z]\.[A-Za-z\-\']+)*)'
-    ]
-    
-    for i, line in enumerate(lines):
-        line_lower = line.lower()
-        if any(indicator in line_lower for indicator in ['et al', 'university', 'institute', 'department', 'college']):
-            for pattern in author_patterns:
-                matches = re.findall(pattern, line)
-                if matches:
-                    authors = []
-                    for match in matches:
-                        # Split by commas and clean up
-                        author_list = re.split(r',|\band\b|&', match)
-                        authors.extend([author.strip() for author in author_list if author.strip()])
-                    if authors:
-                        metadata['authors'] = authors
-                        break
-            if metadata['authors']:
-                break
-    
-    # Improved abstract extraction
-    abstract_start = -1
-    abstract_end = -1
-    
-    for i, line in enumerate(lines):
-        line_lower = line.lower()
-        if 'abstract' in line_lower and abstract_start == -1:
-            abstract_start = i + 1
-        elif abstract_start != -1 and (line_lower.startswith('keywords') or 
-                                      line_lower.startswith('1.') or 
-                                      line_lower.startswith('introduction') or
-                                      len(line) < 10):  # Very short line might indicate section end
-            abstract_end = i
+    # Extract a plausible title
+    for line in lines:
+        line = line.strip()
+        if 20 < len(line) < 200 and not line.startswith(('Abstract', 'Keywords')) and not line.isupper():
+            metadata['title'] = line
             break
-    
-    if abstract_start != -1:
-        if abstract_end == -1:
-            abstract_end = min(abstract_start + 10, len(lines))
-        abstract_lines = lines[abstract_start:abstract_end]
-        metadata['abstract'] = ' '.join(abstract_lines)
-    
-    # Improved journal and year extraction
-    year_pattern = r'\b(19|20)\d{2}\b'
-    
-    for i, line in enumerate(lines):
-        line_lower = line.lower()
-        
-        # Extract journal/conference
-        if any(keyword in line_lower for keyword in ['journal', 'proceedings', 'conference', 'vol.', 'no.', 'pp.']):
+
+    # Extract authors
+    for line in lines:
+        if 'et al' in line.lower() or ',' in line:
+            metadata['authors'] = line
+            break
+
+    # Extract journal or publication info
+    for line in lines:
+        if any(k in line.lower() for k in ['journal', 'conference', 'vol.', 'pp.']):
             metadata['journal'] = line
-        
-        # Extract year
-        year_match = re.search(year_pattern, line)
-        if year_match:
-            metadata['publication_date'] = year_match.group()
-            # If we found a journal line, associate the year with it
-            if metadata['journal'] and not metadata['journal'].endswith(year_match.group()):
-                metadata['journal'] += f", {year_match.group()}"
-    
-    # If no specific year found, search the entire text
-    if not metadata['publication_date']:
-        year_match = re.search(year_pattern, text)
-        if year_match:
-            metadata['publication_date'] = year_match.group()
-    
-    # Extract keywords
-    for i, line in enumerate(lines):
-        if 'keyword' in line.lower():
-            if i + 1 < len(lines):
-                keyword_line = lines[i + 1]
-                # More robust keyword splitting
-                keywords = re.split(r'[;,]|\s+and\s+', keyword_line)
-                metadata['keywords'] = [kw.strip() for kw in keywords if kw.strip() and len(kw.strip()) > 2]
             break
-    
+
+    # Extract year
+    years = re.findall(r'\b(19|20)\d{2}\b', text)
+    if years:
+        metadata['year'] = int(max(years))
+
     return metadata
 
-def add_paper_to_index(text: str, paper_id: int) -> tuple:
-    """Add paper text to FAISS index"""
-    try:
-        chunks = chunk_text(text)
-        print(f"Created {len(chunks)} chunks for paper {paper_id}")
-        
-        if not chunks:
-            return [], []
-        
-        embeddings = get_embeddings_openrouter(chunks)
-        
-        if embeddings and len(embeddings) == len(chunks):
-            # Convert to numpy array
-            embedding_array = np.array(embeddings).astype("float32")
-            
-            # Verify dimension
-            if embedding_array.shape[1] != faiss_index.d:
-                print(f"Embedding dimension mismatch: expected {faiss_index.d}, got {embedding_array.shape[1]}")
-                return chunks, []
-            
-            # Create IDs: paper_id * 10000 + chunk_index (allows up to 10k chunks per paper)
-            ids = np.array([paper_id * 10000 + i for i in range(len(chunks))])
-            
-            # Add to FAISS index
-            faiss_index.add_with_ids(embedding_array, ids)
-            
-            # Save updated index
-            os.makedirs(os.path.dirname(FAISS_INDEX_PATH), exist_ok=True)
-            with open(FAISS_INDEX_PATH, "wb") as f:
-                pickle.dump(faiss_index, f)
-            
-            print(f"Successfully added paper {paper_id} to FAISS index with {len(chunks)} chunks")
-            return chunks, embeddings
-        else:
-            print(f"Failed to get embeddings for paper {paper_id}")
-            return chunks, []
-            
-    except Exception as e:
-        print(f"Error adding paper to index: {e}")
-        return [], []
+def chunk_text(text: str, size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
+    """Chunk large text for embedding."""
+    chunks = []
+    start = 0
+    while start < len(text):
+        end = start + size
+        chunks.append(text[start:end])
+        start += size - overlap
+    return chunks
 
-def semantic_search(query: str, top_k: int = 10) -> List[Dict[str, Any]]:
-    """Perform semantic search using FAISS and OpenRouter embeddings"""
+def add_to_faiss(texts, doc_ids):
+    """Add a list of text chunks to FAISS index."""
+    if not texts:
+        print("[FAISS] ⚠️ No texts provided to add to FAISS")
+        return
+
+    print(f"[FAISS] 📥 Adding {len(texts)} text chunks to FAISS index")
+    print(f"[FAISS] Document IDs: {doc_ids}")
+    
     try:
-        # Get query embedding
-        query_embedding = get_embeddings_openrouter([query])
-        if not query_embedding:
-            return []
+        # Encode the texts
+        embeddings = embed_model.encode(texts, normalize_embeddings=True)
+        print(f"[FAISS] ✅ Generated embeddings with shape: {embeddings.shape}")
         
-        query_vector = np.array([query_embedding[0]]).astype("float32")
+        # Convert IDs to numpy array
+        ids = np.array(doc_ids).astype("int64")
+        print(f"[FAISS] IDs array: {ids}")
         
-        # Search in FAISS
-        distances, indices = faiss_index.search(query_vector, top_k)
+        # Add to index
+        faiss_index.add_with_ids(embeddings.astype("float32"), ids)
         
-        results = []
-        for i, (distance, idx) in enumerate(zip(distances[0], indices[0])):
-            if idx != -1:
-                paper_id = idx // 10000
-                chunk_index = idx % 10000
-                results.append({
-                    'paper_id': int(paper_id),
-                    'chunk_index': int(chunk_index),
-                    'similarity_score': float(1 / (1 + distance)),  # Convert distance to similarity
-                    'distance': float(distance)
-                })
-        
-        return results
+        # Save the index
+        faiss.write_index(faiss_index, FAISS_INDEX_PATH)
+        print(f"[FAISS] 💾 Saved index to {FAISS_INDEX_PATH}")
+        print(f"[FAISS] ✅ Added {len(ids)} vectors. Total now: {faiss_index.ntotal}")
         
     except Exception as e:
-        print(f"Error in semantic search: {e}")
+        print(f"[FAISS] ❌ Error adding to FAISS: {e}")
+        raise
+
+def semantic_search(query, top_k=10):
+    """Perform semantic search via FAISS."""
+    print(f"[FAISS] 🔍 Starting semantic search for: '{query}'")
+    print(f"[FAISS] Total vectors in index: {faiss_index.ntotal}")
+    
+    if faiss_index.ntotal == 0:
+        print("[FAISS] ⚠️ Warning: index empty. No documents have been indexed.")
         return []
 
-def hybrid_search(query: str, papers: List, top_k: int = 10) -> List[Dict[str, Any]]:
-    """Combine semantic and keyword search"""
-    # Semantic search
-    semantic_results = semantic_search(query, top_k * 2)
-    
-    # Keyword search
-    keyword_results = []
-    query_terms = set(term.lower() for term in query.split() if len(term) > 2)
-    
-    if query_terms:
-        for paper in papers:
-            content = f"{paper.title or ''} {paper.abstract or ''} {paper.content or ''}".lower()
-            matches = sum(1 for term in query_terms if term in content)
-            if matches > 0:
-                keyword_results.append({
-                    'paper_id': paper.id,
-                    'keyword_matches': matches,
-                    'content': content
-                })
-    
-    # Combine and rank results
-    combined_results = []
-    seen_papers = set()
-    
-    # Add semantic results first
-    for result in semantic_results:
-        if result['paper_id'] not in seen_papers:
-            paper = next((p for p in papers if p.id == result['paper_id']), None)
-            if paper:
-                combined_results.append({
-                    'paper': paper,
-                    'score': result['similarity_score'],
-                    'type': 'semantic',
-                    'chunk_index': result['chunk_index']
-                })
-                seen_papers.add(paper.id)
-    
-    # Add keyword results
-    for result in keyword_results:
-        if result['paper_id'] not in seen_papers:
-            paper = next((p for p in papers if p.id == result['paper_id']), None)
-            if paper:
-                combined_results.append({
-                    'paper': paper,
-                    'score': result['keyword_matches'] / len(query_terms),
-                    'type': 'keyword',
-                    'chunk_index': 0
-                })
-                seen_papers.add(paper.id)
-    
-    # Sort by score and return top_k
-    combined_results.sort(key=lambda x: x['score'], reverse=True)
-    return combined_results[:top_k]
+    try:
+        query_vec = embed_model.encode([query], normalize_embeddings=True)
+        print(f"[FAISS] Query vector shape: {query_vec.shape}")
+        
+        distances, indices = faiss_index.search(query_vec.astype("float32"), top_k)
+        print(f"[FAISS] Raw search results - distances: {distances}, indices: {indices}")
+        
+        valid_indices = [int(idx) for idx in indices[0] if idx != -1]
+        print(f"[FAISS] ✅ Search returned {len(valid_indices)} valid results: {valid_indices}")
+        return valid_indices
+        
+    except Exception as e:
+        print(f"[FAISS] ❌ Search error: {e}")
+        return []
 
-def get_relevant_snippet(content: str, query: str, max_length: int = 300) -> str:
-    """Extract a relevant snippet showing query terms"""
-    if not content or not query:
-        return content[:max_length] + "..." if len(content) > max_length else content
+def get_doc_text_by_id(doc_id):
+    """Retrieve document content from the database."""
+    with get_db_session() as db:
+        doc = db.query(models.Document).filter(models.Document.id == int(doc_id)).first()
+        return doc.content if doc else None
+
+def add_document_embedding(db, document_id: int, text: str):
+    """Compute and store document embedding in DB."""
+    try:
+        embedding = embed_model.encode([text], normalize_embeddings=True)[0]
+        doc = db.query(models.Document).filter(models.Document.id == document_id).first()
+        if doc:
+            doc.embedding = embedding.tolist()
+            db.commit()
+            print(f"[DB] ✅ Updated embedding for document ID {document_id}.")
+        else:
+            print(f"[DB] ❌ Document {document_id} not found for embedding storage")
+    except Exception as e:
+        print(f"[DB] ❌ Error storing embedding: {e}")
+
+def rebuild_faiss_from_database():
+    """Rebuild FAISS index from all documents in database."""
+    print("[FAISS] 🔄 Rebuilding FAISS index from database...")
     
-    content_lower = content.lower()
-    query_terms = [term for term in query.lower().split() if len(term) > 2]
-    
-    if not query_terms:
-        return content[:max_length] + "..." if len(content) > max_length else content
-    
-    # Find the best match position
-    best_position = -1
-    for term in query_terms:
-        pos = content_lower.find(term)
-        if pos != -1 and (best_position == -1 or pos < best_position):
-            best_position = pos
-    
-    if best_position != -1:
-        start = max(0, best_position - 100)
-        end = min(len(content), best_position + 200)
-        snippet = content[start:end]
+    with get_db_session() as db:
+        documents = db.query(models.Document).all()
+        print(f"[FAISS] Found {len(documents)} documents in database")
         
-        if start > 0:
-            snippet = "..." + snippet
-        if end < len(content):
-            snippet = snippet + "..."
+        texts = []
+        doc_ids = []
         
-        return snippet
-    
-    # Fallback to beginning
-    return content[:max_length] + "..." if len(content) > max_length else content
+        for doc in documents:
+            if doc.content:
+                texts.append(doc.content)
+                doc_ids.append(doc.id)
+                print(f"[FAISS] Adding document {doc.id}: {doc.filename}")
+        
+        if texts:
+            # Clear existing index
+            global faiss_index
+            faiss_index = faiss.IndexIDMap(faiss.IndexFlatIP(dim))
+            
+            # Add all documents
+            add_to_faiss(texts, doc_ids)
+            print(f"[FAISS] ✅ Rebuilt index with {len(texts)} documents")
+        else:
+            print("[FAISS] ⚠️ No documents with content found in database")

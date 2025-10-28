@@ -1,49 +1,59 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean, ForeignKey, ARRAY, JSON
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.sql import func
-import datetime
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Date, Enum, JSON
+from sqlalchemy.orm import relationship
+from database import Base
+from datetime import datetime
+import enum
+from pgvector.sqlalchemy import Vector
 
-Base = declarative_base()
+class MedicalSystem(enum.Enum):
+    UNANI = "UNANI"
+    AYURVEDA = "AYURVEDA"
+    YOGA = "YOGA"
+    SIDDHA = "SIDDHA"
 
-class User(Base):
-    __tablename__ = "users"
-    
+class ResearchCategory(enum.Enum):
+    CLINICAL_GRADE_A = "CLINICAL_GRADE_A"
+    CLINICAL_GRADE_B = "CLINICAL_GRADE_B"
+    CLINICAL_GRADE_C = "CLINICAL_GRADE_C"
+    PRE_CLINICAL = "PRE_CLINICAL"
+    FUNDAMENTAL = "FUNDAMENTAL"
+    DRUG = "DRUG"
+
+class ProjectStatus(enum.Enum):
+    ONGOING = "ONGOING"
+    COMPLETED = "COMPLETED"
+    TERMINATED = "TERMINATED"
+
+class Document(Base):
+    __tablename__ = "documents"
     id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True)
-    email = Column(String, unique=True, index=True)
-    hashed_password = Column(String)
-    is_admin = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
-class Project(Base):
-    __tablename__ = "projects"
+    filename = Column(String, nullable=False)
+    content = Column(Text)  # Store content for search and snippets
+    embedding = Column(Vector(384))  # Vector embedding column
+    extracted_data = Column(JSON)
     
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True, index=True)
-    description = Column(Text)
-    investigatory_team = Column(JSON, nullable=False)
-    status = Column(String)  # ongoing, completed
-    date_initialized = Column(DateTime)
-    date_completed = Column(DateTime, nullable=True)
-    created_by = Column(Integer, ForeignKey("users.id"))
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-
-class ResearchPaper(Base):
-    __tablename__ = "research_papers"
+    # Medical System and Research Category
+    medical_system = Column(Enum(MedicalSystem), nullable=False)
+    research_category = Column(Enum(ResearchCategory), nullable=False)
     
-    id = Column(Integer, primary_key=True, index=True)
-    filename = Column(String)
-    title = Column(String)
-    authors = Column(JSON)
-    abstract = Column(Text)
-    journal = Column(String)
-    publication_date = Column(DateTime, nullable=True)
-    keywords = Column(ARRAY(String))
-    category = Column(String)  # clinical, research_fundamental, etc.
-    content = Column(Text)  # Full text content
-    chunks = Column(JSON)  # Store text chunks
-    embeddings = Column(JSON)  # Store embeddings
-    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
-    uploaded_by = Column(Integer, ForeignKey("users.id"))
-    uploaded_at = Column(DateTime, default=datetime.datetime.utcnow)
+    # Project Details
+    project_title = Column(String)
+    start_year = Column(Integer)
+    end_year = Column(Integer)
+    institution = Column(String)
+    investigator_name = Column(String)
+    sanction_date = Column(Date)
+    project_status = Column(Enum(ProjectStatus), default=ProjectStatus.ONGOING)
+    
+    # Research Details
+    objectives = Column(Text)
+    study_protocol = Column(Text)
+    outcomes = Column(Text)
+    
+    # Publication Details
+    article_title = Column(String)
+    publication_year = Column(Integer)
+    authors = Column(Text)
+    journal_name = Column(String)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)

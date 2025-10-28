@@ -1,92 +1,97 @@
-from pydantic import BaseModel, EmailStr
-from typing import List, Optional
-from datetime import datetime
+from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
+from datetime import date
+from enum import Enum
 
-# Authentication Schemas
-class UserBase(BaseModel):
-    username: str
-    email: EmailStr
+class MedicalSystem(str, Enum):
+    UNANI = "UNANI"
+    AYURVEDA = "AYURVEDA"
+    YOGA = "YOGA"
+    SIDDHA = "SIDDHA"
 
-class UserCreate(UserBase):
-    password: str
+class ResearchCategory(str, Enum):
+    CLINICAL_GRADE_A = "CLINICAL_GRADE_A"
+    CLINICAL_GRADE_B = "CLINICAL_GRADE_B"
+    CLINICAL_GRADE_C = "CLINICAL_GRADE_C"
+    PRE_CLINICAL = "PRE_CLINICAL"
+    FUNDAMENTAL = "FUNDAMENTAL"
+    DRUG = "DRUG"
 
-class UserLogin(BaseModel):
-    username: str
-    password: str
+class ProjectStatus(str, Enum):
+    ONGOING = "ONGOING"
+    COMPLETED = "COMPLETED"
+    TERMINATED = "TERMINATED"
 
-class User(UserBase):
-    id: int
-    is_admin: bool
-    is_active: bool
-    created_at: datetime
+
+class DocumentBase(BaseModel):
+    filename: str
+    content: str
+    extracted_data: Optional[Dict[str, Any]] = None
     
+    # Medical System and Research Category
+    medical_system: MedicalSystem
+    research_category: ResearchCategory
+    
+    # Project Details
+    project_title: Optional[str] = None
+    start_year: Optional[int] = None
+    end_year: Optional[int] = None
+    institution: Optional[str] = None
+    investigator_name: Optional[str] = None
+    sanction_date: Optional[date] = None
+    project_status: ProjectStatus = ProjectStatus.ONGOING
+    
+    # Research Details
+    objectives: Optional[str] = None
+    study_protocol: Optional[str] = None
+    outcomes: Optional[str] = None
+    
+    # Publication Details
+    article_title: Optional[str] = None
+    publication_year: Optional[int] = None
+    authors: Optional[str] = None
+    journal_name: Optional[str] = None
+
+class DocumentCreate(DocumentBase):
+    pass
+
+class Document(DocumentBase):
+    id: int
+    created_at: date
     class Config:
         from_attributes = True
 
-# Project Schemas
-class ProjectBase(BaseModel):
-    name: str
-    description: Optional[str] = None
-    investigatory_team: List[str] = []
-    status: str  # ongoing, completed
-    date_initialized: datetime
-
-class ProjectCreate(ProjectBase):
-    date_completed: Optional[datetime] = None
-
-class Project(ProjectBase):
-    id: int
-    date_completed: Optional[datetime] = None
-    created_by: int
-    created_at: datetime
+class DocumentUploadForm(BaseModel):
+    medical_system: MedicalSystem
+    research_category: ResearchCategory
     
-    class Config:
-        from_attributes = True
+    # Project Details
+    project_title: Optional[str] = None
+    start_year: Optional[int] = None
+    end_year: Optional[int] = None
+    institution: Optional[str] = None
+    investigator_name: Optional[str] = None
+    sanction_date: Optional[date] = None
+    project_status: ProjectStatus = ProjectStatus.ONGOING
+    
+    # Publication Details
+    article_title: Optional[str] = None
+    publication_year: Optional[int] = None
+    authors: Optional[str] = None
+    journal_name: Optional[str] = None
+    
+    # Research Details
+    objectives: Optional[str] = None
+    study_protocol: Optional[str] = None
+    outcomes: Optional[str] = None
 
-# Research Paper Schemas
-class ResearchPaperBase(BaseModel):
-    title: str
-    authors: List[str] = []
-    abstract: Optional[str] = None
+class SearchFilters(BaseModel):
+    medical_system: Optional[MedicalSystem] = None
+    research_category: Optional[ResearchCategory] = None
+    institution: Optional[str] = None
+    author: Optional[str] = None
     journal: Optional[str] = None
-    publication_date: Optional[datetime] = None
-    keywords: List[str] = []
-    category: Optional[str] = None
-    project_id: Optional[int] = None
-
-class ResearchPaperCreate(ResearchPaperBase):
-    filename: str
-    content: str
-
-class ResearchPaper(ResearchPaperBase):
-    id: int
-    filename: str
-    content: str
-    chunks: Optional[List[str]] = None
-    embeddings: Optional[List[List[float]]] = None
-    uploaded_by: int
-    uploaded_at: datetime
-    
-    class Config:
-        from_attributes = True
-
-# Search Schemas
-class SearchResult(BaseModel):
-    id: int
-    title: str
-    authors: List[str]
-    abstract: str
-    journal: Optional[str]
-    publication_date: Optional[datetime]
-    category: Optional[str]
-    snippet: str
-    similarity_score: float
-    filename: str
-    project_name: Optional[str] = None
-    project_status: Optional[str] = None 
-
-class SearchResponse(BaseModel):
-    query: str
-    results: List[SearchResult]
-    total_count: int
-    search_time: float
+    year_from: Optional[int] = None
+    year_to: Optional[int] = None
+    project_status: Optional[ProjectStatus] = None
+    investigator: Optional[str] = None
