@@ -1,7 +1,9 @@
+
 import React, { useState } from 'react';
 import { Upload, FileText } from 'lucide-react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { DOCUMENT_ENDPOINTS, getUploadHeaders } from './api';
 
 const UploadPage = () => {
   const [uploading, setUploading] = useState(false);
@@ -33,19 +35,6 @@ const UploadPage = () => {
   });
   const [file, setFile] = useState(null);
 
-  const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      alert('Please login to upload documents');
-      navigate('/login');
-      return null;
-    }
-    return {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'multipart/form-data',
-    };
-  };
-
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
     if (selectedFile && selectedFile.type === 'application/pdf') {
@@ -70,8 +59,12 @@ const UploadPage = () => {
       return;
     }
 
-    const headers = getAuthHeaders();
-    if (!headers) return;
+    const headers = getUploadHeaders();
+    if (!headers) {
+      alert('Please login to upload documents');
+      navigate('/login');
+      return;
+    }
 
     setUploading(true);
     try {
@@ -83,7 +76,7 @@ const UploadPage = () => {
         if (value) uploadFormData.append(key, value);
       });
 
-      const response = await axios.post('http://localhost:8000/api/upload', uploadFormData, {
+      const response = await axios.post(DOCUMENT_ENDPOINTS.UPLOAD, uploadFormData, {
         headers: headers
       });
 

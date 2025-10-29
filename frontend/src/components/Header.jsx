@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Search, Upload, User, LogOut, Settings } from 'lucide-react';
 import axios from 'axios';
+import { AUTH_ENDPOINTS, getAuthHeaders } from './api';
 
 const Header = () => {
   const location = useLocation();
@@ -26,11 +28,8 @@ const Header = () => {
       }
 
       console.log('🔄 Fetching user data...');
-      const response = await axios.get('http://localhost:8000/api/auth/me', {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
+      const response = await axios.get(AUTH_ENDPOINTS.ME, {
+        headers: getAuthHeaders()
       });
       
       console.log('✅ User data received:', response.data);

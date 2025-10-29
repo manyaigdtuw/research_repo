@@ -1,7 +1,9 @@
+
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LogIn, AlertCircle } from 'lucide-react';
 import axios from 'axios';
+import { AUTH_ENDPOINTS } from './api';
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({
@@ -26,7 +28,7 @@ const LoginPage = () => {
     setError('');
 
     try {
-      const response = await axios.post('http://localhost:8000/api/auth/login', formData);
+      const response = await axios.post(AUTH_ENDPOINTS.LOGIN, formData);
       
       localStorage.setItem('token', response.data.access_token);
       

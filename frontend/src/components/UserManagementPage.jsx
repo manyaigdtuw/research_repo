@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { Users, Plus, Trash2, Edit } from 'lucide-react';
 import axios from 'axios';
+import { USER_ENDPOINTS, getAuthHeaders } from './api';
 
 const UserManagementPage = () => {
   const [users, setUsers] = useState([]);
@@ -20,9 +22,11 @@ const UserManagementPage = () => {
 
   const fetchUsers = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:8000/api/users', {
-        headers: { Authorization: `Bearer ${token}` }
+      const headers = getAuthHeaders();
+      if (!headers) return;
+      
+      const response = await axios.get(USER_ENDPOINTS.USERS, {
+        headers: headers
       });
       setUsers(response.data);
     } catch (error) {
@@ -35,9 +39,11 @@ const UserManagementPage = () => {
     setLoading(true);
     
     try {
-      const token = localStorage.getItem('token');
-      await axios.post('http://localhost:8000/api/users', formData, {
-        headers: { Authorization: `Bearer ${token}` }
+      const headers = getAuthHeaders();
+      if (!headers) return;
+      
+      await axios.post(USER_ENDPOINTS.CREATE_USER, formData, {
+        headers: headers
       });
       
       setShowCreateForm(false);

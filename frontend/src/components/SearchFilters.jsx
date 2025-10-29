@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect } from 'react';
 import { Filter, X } from 'lucide-react';
 import axios from 'axios';
+import { SEARCH_ENDPOINTS } from './api';
 
 const SearchFilters = ({ filters, onFiltersChange }) => {
   const [filterOptions, setFilterOptions] = useState({
@@ -38,7 +40,7 @@ const SearchFilters = ({ filters, onFiltersChange }) => {
   useEffect(() => {
     const fetchFilterOptions = async () => {
       try {
-        const response = await axios.get('http://localhost:8000/api/filters/options');
+        const response = await axios.get(SEARCH_ENDPOINTS.FILTER_OPTIONS);
         setFilterOptions(response.data);
       } catch (error) {
         console.error('Error fetching filter options:', error);

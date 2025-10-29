@@ -1,7 +1,9 @@
+
 import React, { useState, useEffect } from 'react';
 import { Search, Download, Calendar, Building, User, BookOpen, AlertCircle, FileText, Eye } from 'lucide-react';
 import axios from 'axios';
 import SearchFilters from './SearchFilters';
+import { SEARCH_ENDPOINTS, DOCUMENT_ENDPOINTS } from './api';
 
 const SearchPage = () => {
   const [query, setQuery] = useState('');
@@ -79,7 +81,7 @@ const SearchPage = () => {
   const checkServerStatus = async () => {
     try {
       console.log('🔍 Checking server status...');
-      const response = await axios.get('http://localhost:8000/api/filters/options');
+      const response = await axios.get(SEARCH_ENDPOINTS.FILTER_OPTIONS);
       console.log('Server is running, filter options loaded');
     } catch (err) {
       console.error('Server status check failed:', err);
@@ -109,7 +111,7 @@ const SearchPage = () => {
 
       console.log('🔍 Search params:', params.toString());
       
-      const response = await axios.get(`http://localhost:8000/api/search?${params}`);
+      const response = await axios.get(`${SEARCH_ENDPOINTS.SEARCH}?${params}`);
       console.log('✅ Search results:', response.data);
       
       // Process results to clean up snippets
@@ -132,7 +134,7 @@ const SearchPage = () => {
   const handleDownload = async (documentId, filename) => {
     try {
       const response = await axios.get(
-        `http://localhost:8000/api/download/${documentId}`,
+        DOCUMENT_ENDPOINTS.DOWNLOAD(documentId),
         { 
           responseType: 'blob'
         }
@@ -153,7 +155,7 @@ const SearchPage = () => {
   };
 
   const handleView = (documentId) => {
-    const apiUrl = `http://localhost:8000/api/download/${documentId}?view=true`;
+    const apiUrl = `${DOCUMENT_ENDPOINTS.DOWNLOAD(documentId)}?view=true`;
     window.open(apiUrl, '_blank', 'noopener,noreferrer');
   };
 
