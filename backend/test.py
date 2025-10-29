@@ -1,7 +1,7 @@
 import sys
 import os
 
-# Ensure project root is in path
+# Ensure project root is in the Python path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from database import SessionLocal
@@ -10,22 +10,25 @@ import models
 
 
 def create_superadmin():
+    """Creates a default SUPERADMIN user if one does not already exist."""
     db = SessionLocal()
     try:
-        # Check if superadmin already exists (using email instead of role for reliability)
-        existing = db.query(models.User).filter(models.User.email == "superadmin@ccras.gov.in").first()
+        email = "superadmin@ccras.gov.in"
+        password = "admin123"  # ⚠️ Change this in production
+
+        existing = db.query(models.User).filter(models.User.email == email).first()
         if existing:
-            print("⚠️  Superadmin already exists!")
+            print(f"⚠️ Superadmin already exists: {email}")
             return
 
-        # Create superadmin user
+        hashed_pw = get_password_hash(password)
         superadmin = models.User(
-            email="superadmin@ccras.gov.in",
-            hashed_password=get_password_hash("admin123"),  # Change this in production!
+            email=email,
+            hashed_password=hashed_pw,
             full_name="Super Administrator",
             institution="CCRAS",
-            role=models.UserRole.SUPERADMIN,  # ✅ Fixed: changed SUPER_ADMIN to SUPERADMIN
-            is_active=True
+            role=models.UserRole.SUPERADMIN,
+            is_active=True,
         )
 
         db.add(superadmin)
@@ -33,8 +36,10 @@ def create_superadmin():
         db.refresh(superadmin)
 
         print("✅ Superadmin created successfully!")
-        print(f"Email: {superadmin.email}")
-        print("Password: admin123 (please change immediately in production)")
+        print(f"   Email: {email}")
+        print(f"   Password: {password}")
+        print(f"   Role: {superadmin.role}")
+        print(f"   Hash: {hashed_pw}")
 
     except Exception as e:
         db.rollback()

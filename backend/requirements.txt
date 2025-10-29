@@ -16,3 +16,4 @@ pgvector
 python-jose[cryptography]
 passlib[bcrypt]
 python-multipart
+argon2_cffi
