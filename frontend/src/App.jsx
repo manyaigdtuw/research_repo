@@ -1,9 +1,9 @@
-
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Header from './components/Header';
 import SearchPage from './components/SearchPage';
 import UploadPage from './components/UploadPage';
+import BulkUploadPage from './components/BulkUploadPage'; // Add this import
 import LoginPage from './components/LoginPage';
 import UserManagementPage from './components/UserManagementPage';
 import { AuthProvider, useAuth } from './components/AuthContext';
@@ -66,6 +66,15 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <UploadPage />
+              </ProtectedRoute>
+            } 
+          />
+          {/* Add Bulk Upload Route */}
+          <Route 
+            path="/upload/bulk" 
+            element={
+              <ProtectedRoute>
+                <BulkUploadPage />
               </ProtectedRoute>
             } 
           />

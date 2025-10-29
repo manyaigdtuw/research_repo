@@ -1,7 +1,6 @@
-
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Upload, User, LogOut, Settings } from 'lucide-react';
+import { Search, Upload, User, LogOut, Settings, FileUp } from 'lucide-react';
 import { useAuth } from './AuthContext';
 
 const Header = () => {
@@ -16,19 +15,19 @@ const Header = () => {
     navigate('/');
   };
 
-  // Debug info
-  console.log('👤 Current User State:', currentUser);
-  console.log('🔐 Token in localStorage:', localStorage.getItem('token'));
-
+  // Don't show upload options if still loading
   const shouldShowUpload = currentUser && 
     (currentUser.role === 'SUPERADMIN' || currentUser.role === 'INSTITUTE');
 
   const navItems = [
     { path: '/', icon: Search, label: 'Search' },
-    ...(shouldShowUpload ? [{ path: '/upload', icon: Upload, label: 'Upload' }] : [])
+    ...(shouldShowUpload ? [
+      { path: '/upload', icon: Upload, label: 'Single Upload' },
+      { path: '/upload/bulk', icon: FileUp, label: 'Bulk Upload' }
+    ] : [])
   ];
 
-  // Show loading state briefly
+  // If loading, show a simplified header that still allows navigation
   if (loading) {
     return (
       <header className="bg-white shadow-lg border-b">
@@ -38,8 +37,23 @@ const Header = () => {
               <h3 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                 CCRAS
               </h3>
+              <nav className="flex space-x-1">
+                <Link
+                  to="/"
+                  className={`flex items-center space-x-3 px-5 py-3 rounded-xl transition-all duration-200 font-medium ${
+                    location.pathname === '/'
+                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+                      : 'text-gray-600 hover:text-blue-700 hover:bg-gray-100'
+                  }`}
+                >
+                  <Search size={20} />
+                  <span>Search</span>
+                </Link>
+              </nav>
             </div>
-            <div className="text-sm text-gray-500">Loading...</div>
+            <div className="flex items-center space-x-4">
+              <div className="text-sm text-gray-500">Loading...</div>
+            </div>
           </div>
         </div>
       </header>

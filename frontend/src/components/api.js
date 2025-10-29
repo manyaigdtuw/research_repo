@@ -17,6 +17,8 @@ export const SEARCH_ENDPOINTS = {
 // Document endpoints
 export const DOCUMENT_ENDPOINTS = {
   UPLOAD: `${API_BASE_URL}/upload`,
+  UPLOAD_BULK: `${API_BASE_URL}/upload/bulk`,
+  DOWNLOAD_TEMPLATE: `${API_BASE_URL}/upload/bulk-template`,
   DOWNLOAD: (documentId) => `${API_BASE_URL}/download/${documentId}`,
 };
 
@@ -49,6 +51,7 @@ export const getUploadHeaders = () => {
     'Content-Type': 'multipart/form-data',
   };
 };
+
 
 // Export base URL in case it's needed elsewhere
 export { API_BASE_URL };

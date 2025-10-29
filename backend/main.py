@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Form, Request
+from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,6 +6,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import shutil, os
 import models
 import schemas
+from typing import List
 import crud
 import database
 import utils
@@ -15,6 +16,10 @@ from typing import Optional
 import json
 from auth import create_access_token, verify_token, get_password_hash, verify_password
 from datetime import timedelta
+from fastapi import Form
+import csv
+import io
+
 
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Research Repository")
@@ -480,6 +485,162 @@ def create_initial_superadmin(
     db.refresh(superadmin)
     
     return {"message": "Initial superadmin created successfully"}
+
+@app.post("/api/upload/bulk")
+async def upload_documents_bulk(
+    csv_file: UploadFile = File(...),
+    pdf_files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Bulk upload documents using CSV for metadata and multiple PDF files
+    """
+    # Check permissions
+    if current_user.role not in [models.UserRole.SUPERADMIN, models.UserRole.INSTITUTE]:
+        raise HTTPException(status_code=403, detail="Only superadmin and institute users can upload documents")
+    
+    if not csv_file.filename.lower().endswith('.csv'):
+        raise HTTPException(status_code=400, detail="CSV file required")
+    
+    results = []
+    errors = []
+    
+    try:
+        # Read CSV content
+        csv_content = await csv_file.read()
+        csv_text = csv_content.decode('utf-8')
+        csv_reader = csv.DictReader(io.StringIO(csv_text))
+        
+        # Create mapping of filename to PDF file
+        pdf_map = {pdf.filename: pdf for pdf in pdf_files}
+        
+        # Process each row in CSV
+        for row_num, row in enumerate(csv_reader, start=2):  # row_num starts at 2 (header is row 1)
+            try:
+                filename = row.get('filename', '').strip()
+                if not filename:
+                    errors.append(f"Row {row_num}: Missing filename")
+                    continue
+                
+                # Check if PDF exists for this row
+                if filename not in pdf_map:
+                    errors.append(f"Row {row_num}: PDF file '{filename}' not found in uploaded files")
+                    continue
+                
+                pdf_file = pdf_map[filename]
+                
+                # Validate required fields
+                medical_system = row.get('medical_system', '').strip()
+                research_category = row.get('research_category', '').strip()
+                
+                if not medical_system:
+                    errors.append(f"Row {row_num}: Missing medical_system")
+                    continue
+                if not research_category:
+                    errors.append(f"Row {row_num}: Missing research_category")
+                    continue
+                
+                # Validate enum values
+                try:
+                    medical_system_enum = models.MedicalSystem(medical_system)
+                    research_category_enum = models.ResearchCategory(research_category)
+                except ValueError as e:
+                    errors.append(f"Row {row_num}: Invalid enum value - {e}")
+                    continue
+                
+                # Save PDF file
+                file_location = os.path.join(STORAGE_PATH, filename)
+                with open(file_location, "wb") as f:
+                    shutil.copyfileobj(pdf_file.file, f)
+                
+                # Extract text from PDF
+                text_content = utils.pdf_to_text(file_location)
+                
+                if not text_content.strip():
+                    errors.append(f"Row {row_num}: Could not extract text from {filename}")
+                    os.remove(file_location)
+                    continue
+                
+                # Parse optional fields
+                def parse_optional_int(value):
+                    return int(value) if value and value.strip() else None
+                
+                def parse_optional_date(value):
+                    return value if value and value.strip() else None
+                
+                # Create document data
+                doc_data = schemas.DocumentCreate(
+                    filename=filename,
+                    content=text_content,
+                    extracted_data={},  # Empty since we're using CSV metadata
+                    medical_system=medical_system_enum,
+                    research_category=research_category_enum,
+                    project_title=row.get('project_title', '').strip() or None,
+                    start_year=parse_optional_int(row.get('start_year')),
+                    end_year=parse_optional_int(row.get('end_year')),
+                    institution=row.get('institution', '').strip() or None,
+                    investigator_name=row.get('investigator_name', '').strip() or None,
+                    sanction_date=parse_optional_date(row.get('sanction_date')),
+                    project_status=row.get('project_status', 'ONGOING').strip(),
+                    article_title=row.get('article_title', '').strip() or None,
+                    publication_year=parse_optional_int(row.get('publication_year')),
+                    authors=row.get('authors', '').strip() or None,
+                    journal_name=row.get('journal_name', '').strip() or None,
+                    objectives=row.get('objectives', '').strip() or None,
+                    study_protocol=row.get('study_protocol', '').strip() or None,
+                    outcomes=row.get('outcomes', '').strip() or None
+                )
+                
+                # Create document in database
+                db_doc = crud.create_document(db, doc_data)
+                
+                # Add to FAISS for semantic search
+                utils.add_to_faiss([text_content], [db_doc.id])
+                
+                # Store embedding in database
+                utils.add_document_embedding(db, db_doc.id, text_content)
+                
+                results.append({
+                    "filename": filename,
+                    "doc_id": db_doc.id,
+                    "status": "success"
+                })
+                
+            except Exception as e:
+                errors.append(f"Row {row_num}: Error processing {filename} - {str(e)}")
+                continue
+        
+        return {
+            "message": f"Bulk upload completed. {len(results)} successful, {len(errors)} errors.",
+            "successful_uploads": results,
+            "errors": errors
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error processing bulk upload: {str(e)}")
+
+@app.get("/api/upload/bulk-template")
+async def download_bulk_upload_template():
+    """
+    Download CSV template for bulk upload
+    """
+    template_content = """filename,medical_system,research_category,project_title,start_year,end_year,institution,investigator_name,sanction_date,project_status,article_title,publication_year,authors,journal_name,objectives,study_protocol,outcomes
+example1.pdf,AYURVEDA,CLINICAL_GRADE_A,Research Project 1,2020,2023,CCRAS,Dr. John Doe,2020-01-15,ONGOING,Study on Ayurvedic Medicine,2023,John Doe et al,Journal of Ayurveda,Study objectives,Study protocol,Research outcomes
+example2.pdf,UNANI,CLINICAL_GRADE_B,Research Project 2,2021,2024,CCRAS,Dr. Jane Smith,2021-03-20,COMPLETED,Unani Medicine Research,2024,Jane Smith et al,Unani Journal,Objectives here,Protocol details,Findings summary
+
+# Required fields: filename, medical_system, research_category
+# Medical System options: UNANI, AYURVEDA, YOGA, SIDDHA
+# Research Category options: CLINICAL_GRADE_A, CLINICAL_GRADE_B, CLINICAL_GRADE_C, PRE_CLINICAL, FUNDAMENTAL, DRUG
+# Project Status options: ONGOING, COMPLETED, TERMINATED
+# Date format: YYYY-MM-DD
+"""
+    
+    return Response(
+        content=template_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=bulk_upload_template.csv"}
+    )
 
 if __name__ == "__main__":
     import uvicorn

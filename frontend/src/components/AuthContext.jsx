@@ -1,4 +1,3 @@
-
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import axios from 'axios';
 import { AUTH_ENDPOINTS, getAuthHeaders } from './api';
@@ -26,9 +25,13 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      const response = await axios.get(AUTH_ENDPOINTS.ME, {
-        headers: getAuthHeaders()
-      });
+      // Create headers manually instead of using getAuthHeaders()
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      };
+
+      const response = await axios.get(AUTH_ENDPOINTS.ME, { headers });
       
       setCurrentUser(response.data);
     } catch (error) {
