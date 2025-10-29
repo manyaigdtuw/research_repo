@@ -15,7 +15,7 @@ CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 50))
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
-
+OPENAI_API_KEY="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"
 
 # Medical Systems (enum values)
 MEDICAL_SYSTEMS = ["UNANI", "AYURVEDA", "YOGA", "SIDDHA"]

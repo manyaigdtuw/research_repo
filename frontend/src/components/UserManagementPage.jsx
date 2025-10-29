@@ -65,7 +65,6 @@ const UserManagementPage = () => {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
         <button
           onClick={() => setShowCreateForm(true)}
           className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"

@@ -3,11 +3,12 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Header from './components/Header';
 import SearchPage from './components/SearchPage';
 import UploadPage from './components/UploadPage';
-import BulkUploadPage from './components/BulkUploadPage'; // Add this import
+import BulkUploadPage from './components/BulkUploadPage';
 import LoginPage from './components/LoginPage';
 import UserManagementPage from './components/UserManagementPage';
 import { AuthProvider, useAuth } from './components/AuthContext';
 import ExportPage from './components/ExportPage';
+import ChatBot from './components/ChatBot'; // Add this import
 
 import './index.css';
 
@@ -71,7 +72,6 @@ function AppContent() {
               </ProtectedRoute>
             } 
           />
-          {/* Add Bulk Upload Route */}
           <Route 
             path="/upload/bulk" 
             element={
@@ -80,15 +80,14 @@ function AppContent() {
               </ProtectedRoute>
             } 
           />
-         < Route 
-  path="/export" 
-  element={
-    <ProtectedRoute>
-      <ExportPage />
-    </ProtectedRoute>
-  } 
-/>
-
+          <Route 
+            path="/export" 
+            element={
+              <ProtectedRoute>
+                <ExportPage />
+              </ProtectedRoute>
+            } 
+          />
           <Route 
             path="/admin" 
             element={
@@ -97,10 +96,12 @@ function AppContent() {
               </SuperAdminRoute>
             } 
           />
-          {/* Catch all route - redirect to home */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+      
+      {/* Add ChatBot component - it will appear on all pages */}
+      <ChatBot />
     </div>
   );
 }

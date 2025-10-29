@@ -1,5 +1,6 @@
 from fastapi import FastAPI, File, UploadFile, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
+from fastapi import Body, Depends, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -21,11 +22,18 @@ import csv
 import io
 from fastapi.responses import StreamingResponse
 from typing import List, Optional
+from openai import OpenAI
+from config import OPENAI_API_KEY
+
 
 
 
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Research Repository")
+
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -644,6 +652,72 @@ example2.pdf,UNANI,CLINICAL_GRADE_B,Research Project 2,2021,2024,CCRAS,Dr. Jane 
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=bulk_upload_template.csv"}
     )
+
+
+@app.post("/api/chat")
+async def chat_with_documents(
+    message: str = Body(..., embed=True),
+    db: Session = Depends(get_db)
+):
+    """
+    Chat endpoint that uses RAG to answer questions based on document content.
+    """
+    try:
+        print(f"🤖 [CHAT] Received message: {message}")
+        
+        # Step 1: Semantic search
+        relevant_doc_ids = utils.semantic_search(message, top_k=5)
+        print(f"📄 [CHAT] Found {len(relevant_doc_ids)} relevant documents: {relevant_doc_ids}")
+        
+        # Step 2: Get relevant document content
+        context_parts = []
+        for doc_id in relevant_doc_ids:
+            doc = db.query(models.Document).filter(models.Document.id == doc_id).first()
+            if doc and doc.content:
+                snippet = doc.content[:1000] + "..." if len(doc.content) > 1000 else doc.content
+                context_parts.append(f"Document {doc_id} ({doc.filename}): {snippet}")
+
+        context = "\n\n".join(context_parts)
+        if not context:
+            context = "No relevant documents found in the database."
+        
+        # Step 3: Build prompt
+        system_prompt = """You are a helpful research assistant for a traditional medicine research repository. 
+        Answer the user's question based ONLY on the provided document context. 
+        If the context doesn't contain relevant information, say so clearly.
+        Be concise and helpful. Cite document IDs when referencing specific information."""
+
+        user_prompt = f"""Context from research documents:
+        {context}
+        
+        User question: {message}
+        
+        Answer:"""
+
+        # Step 4: Generate response (new API)
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=500,
+            temperature=0.3
+        )
+
+        answer = response.choices[0].message.content
+
+        return {
+            "answer": answer,
+            "relevant_documents": relevant_doc_ids,
+            "context_used": len(context_parts) > 0
+        }
+
+    except Exception as e:
+        import traceback
+        print("❌ [CHAT] Full error details:")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Chat error: {str(e)}")
 
 
 @app.get("/api/export/documents")
