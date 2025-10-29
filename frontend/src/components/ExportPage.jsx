@@ -251,61 +251,6 @@ const ExportPage = () => {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Institution
-                  </label>
-                  <input
-                    type="text"
-                    name="institution"
-                    value={filters.institution}
-                    onChange={handleFilterChange}
-                    className="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Filter by institution"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Author
-                  </label>
-                  <input
-                    type="text"
-                    name="author"
-                    value={filters.author}
-                    onChange={handleFilterChange}
-                    className="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Filter by author"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Start Year
-                  </label>
-                  <input
-                    type="number"
-                    name="year_from"
-                    value={filters.year_from}
-                    onChange={handleFilterChange}
-                    className="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="From YYYY"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    End Year
-                  </label>
-                  <input
-                    type="number"
-                    name="year_to"
-                    value={filters.year_to}
-                    onChange={handleFilterChange}
-                    className="w-full border rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="To YYYY"
-                  />
-                </div>
               </div>
             </div>
           )}
