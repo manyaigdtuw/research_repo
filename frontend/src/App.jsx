@@ -7,6 +7,8 @@ import BulkUploadPage from './components/BulkUploadPage'; // Add this import
 import LoginPage from './components/LoginPage';
 import UserManagementPage from './components/UserManagementPage';
 import { AuthProvider, useAuth } from './components/AuthContext';
+import ExportPage from './components/ExportPage';
+
 import './index.css';
 
 // Protected Route component
@@ -78,6 +80,15 @@ function AppContent() {
               </ProtectedRoute>
             } 
           />
+         < Route 
+  path="/export" 
+  element={
+    <ProtectedRoute>
+      <ExportPage />
+    </ProtectedRoute>
+  } 
+/>
+
           <Route 
             path="/admin" 
             element={

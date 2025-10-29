@@ -8,6 +8,11 @@ export const AUTH_ENDPOINTS = {
   ME: `${API_BASE_URL}/auth/me`,
 };
 
+export const EXPORT_ENDPOINTS = {
+  EXPORT_ALL: `${API_BASE_URL}/export/documents`,
+  EXPORT_FILTERED: `${API_BASE_URL}/export/documents/filtered`,
+};
+
 // Search endpoints
 export const SEARCH_ENDPOINTS = {
   SEARCH: `${API_BASE_URL}/search`,

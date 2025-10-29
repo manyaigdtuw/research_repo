@@ -19,6 +19,9 @@ from datetime import timedelta
 from fastapi import Form
 import csv
 import io
+from fastapi.responses import StreamingResponse
+from typing import List, Optional
+
 
 
 models.Base.metadata.create_all(bind=engine)
@@ -641,6 +644,198 @@ example2.pdf,UNANI,CLINICAL_GRADE_B,Research Project 2,2021,2024,CCRAS,Dr. Jane 
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=bulk_upload_template.csv"}
     )
+
+
+@app.get("/api/export/documents")
+async def export_documents(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Export all documents metadata to CSV
+    """
+    print("🔍 [EXPORT] Starting export process...")
+    
+    # Check permissions - only SUPERADMIN and INSTITUTE can export
+    if current_user.role not in [models.UserRole.SUPERADMIN, models.UserRole.INSTITUTE]:
+        print("❌ [EXPORT] Permission denied for user:", current_user.email)
+        raise HTTPException(status_code=403, detail="Only superadmin and institute users can export documents")
+    
+    try:
+        # Get all documents
+        documents = db.query(models.Document).all()
+        print(f"📊 [EXPORT] Found {len(documents)} documents")
+        
+        # Create CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'filename', 'medical_system', 'research_category', 'project_title',
+            'start_year', 'end_year', 'institution', 'investigator_name',
+            'sanction_date', 'project_status', 'article_title', 'publication_year',
+            'authors', 'journal_name', 'objectives', 'study_protocol', 'outcomes',
+            'created_at', 'document_id'
+        ])
+        
+        # Write data
+        for doc in documents:
+            print(f"📝 [EXPORT] Processing document: {doc.filename}")
+            writer.writerow([
+                doc.filename,
+                doc.medical_system.value if doc.medical_system else '',
+                doc.research_category.value if doc.research_category else '',
+                doc.project_title or '',
+                doc.start_year or '',
+                doc.end_year or '',
+                doc.institution or '',
+                doc.investigator_name or '',
+                doc.sanction_date.isoformat() if doc.sanction_date else '',
+                doc.project_status.value if doc.project_status else '',
+                doc.article_title or '',
+                doc.publication_year or '',
+                doc.authors or '',
+                doc.journal_name or '',
+                doc.objectives or '',
+                doc.study_protocol or '',
+                doc.outcomes or '',
+                doc.created_at.isoformat() if doc.created_at else '',
+                doc.id
+            ])
+        
+        # Create response
+        output.seek(0)
+        csv_content = output.getvalue()
+        print(f"✅ [EXPORT] CSV content generated, length: {len(csv_content)}")
+        
+        return StreamingResponse(
+            io.BytesIO(csv_content.encode('utf-8')),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": "attachment; filename=documents_export.csv",
+                "Content-Type": "text/csv; charset=utf-8"
+            }
+        )
+        
+    except Exception as e:
+        print(f"❌ [EXPORT] Error exporting documents: {str(e)}")
+        print(f"❌ [EXPORT] Error type: {type(e)}")
+        import traceback
+        print(f"❌ [EXPORT] Traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"Error exporting documents: {str(e)}")
+    
+@app.get("/api/export/documents/filtered")
+async def export_filtered_documents(
+    medical_system: Optional[str] = None,
+    research_category: Optional[str] = None,
+    institution: Optional[str] = None,
+    author: Optional[str] = None,
+    journal: Optional[str] = None,
+    year_from: Optional[int] = None,
+    year_to: Optional[int] = None,
+    project_status: Optional[str] = None,
+    investigator: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Export filtered documents metadata to CSV
+    """
+    # Check permissions
+    if current_user.role not in [models.UserRole.SUPERADMIN, models.UserRole.INSTITUTE]:
+        raise HTTPException(status_code=403, detail="Only superadmin and institute users can export documents")
+    
+    try:
+        # Use the same filtering logic as search
+        query = db.query(models.Document)
+        
+        if medical_system:
+            query = query.filter(models.Document.medical_system == medical_system)
+        if research_category:
+            query = query.filter(models.Document.research_category == research_category)
+        if institution:
+            query = query.filter(models.Document.institution.ilike(f"%{institution}%"))
+        if author:
+            query = query.filter(models.Document.authors.ilike(f"%{author}%"))
+        if journal:
+            query = query.filter(models.Document.journal_name.ilike(f"%{journal}%"))
+        if year_from:
+            query = query.filter(models.Document.publication_year >= year_from)
+        if year_to:
+            query = query.filter(models.Document.publication_year <= year_to)
+        if project_status:
+            query = query.filter(models.Document.project_status == project_status)
+        if investigator:
+            query = query.filter(models.Document.investigator_name.ilike(f"%{investigator}%"))
+        
+        documents = query.all()
+        
+        # Create CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'filename', 'medical_system', 'research_category', 'project_title',
+            'start_year', 'end_year', 'institution', 'investigator_name',
+            'sanction_date', 'project_status', 'article_title', 'publication_year',
+            'authors', 'journal_name', 'objectives', 'study_protocol', 'outcomes',
+            'created_at', 'document_id'
+        ])
+        
+        # Write data
+        for doc in documents:
+            writer.writerow([
+                doc.filename,
+                doc.medical_system.value if doc.medical_system else '',
+                doc.research_category.value if doc.research_category else '',
+                doc.project_title or '',
+                doc.start_year or '',
+                doc.end_year or '',
+                doc.institution or '',
+                doc.investigator_name or '',
+                doc.sanction_date.isoformat() if doc.sanction_date else '',
+                doc.project_status.value if doc.project_status else '',
+                doc.article_title or '',
+                doc.publication_year or '',
+                doc.authors or '',
+                doc.journal_name or '',
+                doc.objectives or '',
+                doc.study_protocol or '',
+                doc.outcomes or '',
+                doc.created_at.isoformat() if doc.created_at else '',
+                doc.id
+            ])
+        
+        # Create response
+        output.seek(0)
+        
+        # Generate filename with filters
+        filename = "documents_export"
+        filters = []
+        if medical_system:
+            filters.append(f"medical_system_{medical_system}")
+        if research_category:
+            filters.append(f"research_category_{research_category}")
+        if institution:
+            filters.append(f"institution_{institution}")
+        if filters:
+            filename += "_" + "_".join(filters)
+        filename += ".csv"
+        
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode('utf-8')),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Content-Type": "text/csv; charset=utf-8"
+            }
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error exporting documents: {str(e)}")
+    
 
 if __name__ == "__main__":
     import uvicorn

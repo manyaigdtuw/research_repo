@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Upload, User, LogOut, Settings, FileUp } from 'lucide-react';
+import { Search, Upload, User, LogOut, Settings, FileUp, Download } from 'lucide-react'; // Added Download import
 import { useAuth } from './AuthContext';
 
 const Header = () => {
@@ -23,7 +23,8 @@ const Header = () => {
     { path: '/', icon: Search, label: 'Search' },
     ...(shouldShowUpload ? [
       { path: '/upload', icon: Upload, label: 'Single Upload' },
-      { path: '/upload/bulk', icon: FileUp, label: 'Bulk Upload' }
+      { path: '/upload/bulk', icon: FileUp, label: 'Bulk Upload' },
+      { path: '/export', icon: Download, label: 'Export' } // Now Download is defined
     ] : [])
   ];
 

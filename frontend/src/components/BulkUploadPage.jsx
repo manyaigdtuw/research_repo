@@ -101,14 +101,10 @@ const BulkUploadPage = () => {
 
   return (
     <div className="max-w-4xl mx-auto">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">Bulk Upload Research Documents</h1>
-        <p className="text-gray-600">Upload multiple documents using a CSV file for metadata</p>
-      </div>
-
+      
       <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Bulk Upload Instructions</h2>
+          <h2 className="text-lg font-semibold">Instructions</h2>
           <button
             onClick={downloadTemplate}
             className="flex items-center space-x-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
