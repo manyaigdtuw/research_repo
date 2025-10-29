@@ -1,57 +1,17 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Search, Upload, User, LogOut, Settings } from 'lucide-react';
-import axios from 'axios';
-import { AUTH_ENDPOINTS, getAuthHeaders } from './api';
+import { useAuth } from './AuthContext';
 
 const Header = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [currentUser, setCurrentUser] = useState(null);
+  const { currentUser, loading, logout } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    checkAuthStatus();
-  }, []);
-
-  const checkAuthStatus = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      console.log('🔐 Token from localStorage:', token);
-      
-      if (!token) {
-        console.log('❌ No token found in localStorage');
-        setLoading(false);
-        return;
-      }
-
-      console.log('🔄 Fetching user data...');
-      const response = await axios.get(AUTH_ENDPOINTS.ME, {
-        headers: getAuthHeaders()
-      });
-      
-      console.log('✅ User data received:', response.data);
-      setCurrentUser(response.data);
-    } catch (error) {
-      console.error('❌ Auth check failed:', error);
-      console.error('❌ Error details:', error.response?.data);
-      
-      // If unauthorized, clear the invalid token
-      if (error.response?.status === 401) {
-        localStorage.removeItem('token');
-        console.log('🗑️ Invalid token removed');
-      }
-      setCurrentUser(null);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    setCurrentUser(null);
+    logout();
     setShowDropdown(false);
     navigate('/');
   };

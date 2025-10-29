@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { LogIn, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import { AUTH_ENDPOINTS } from './api';
+import { useAuth } from './AuthContext';
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({
@@ -13,6 +14,7 @@ const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -30,7 +32,8 @@ const LoginPage = () => {
     try {
       const response = await axios.post(AUTH_ENDPOINTS.LOGIN, formData);
       
-      localStorage.setItem('token', response.data.access_token);
+      // Use the context login function to update global state
+      login(response.data.user, response.data.access_token);
       
       // Redirect based on role
       const user = response.data.user;
@@ -53,7 +56,7 @@ const LoginPage = () => {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to CCRAS
+            Sign in
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Research Repository System
