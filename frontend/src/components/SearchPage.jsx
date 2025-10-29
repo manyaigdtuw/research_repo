@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Download, Calendar, Building, User, BookOpen, AlertCircle, FileText } from 'lucide-react';
+import { Search, Download, Calendar, Building, User, BookOpen, AlertCircle, FileText, Eye } from 'lucide-react';
 import axios from 'axios';
 import SearchFilters from './SearchFilters';
 
@@ -152,6 +152,11 @@ const SearchPage = () => {
     }
   };
 
+  const handleView = (documentId) => {
+    const apiUrl = `http://localhost:8000/api/download/${documentId}?view=true`;
+    window.open(apiUrl, '_blank', 'noopener,noreferrer');
+  };
+
   const getStatusBadge = (status) => {
     const statusConfig = {
       'ONGOING': { color: 'bg-blue-100 text-blue-800', label: 'Ongoing' },
@@ -236,156 +241,307 @@ const SearchPage = () => {
       {/* Filters */}
       <SearchFilters filters={filters} onFiltersChange={setFilters} />
 
-      {/* Results Section */}
-      <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
-        {/* Results Header */}
-        <div className="px-6 py-4 border-b bg-gray-50">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
-              <FileText size={20} />
-              <span>Search Results</span>
-            </h2>
-            <span className="text-sm text-gray-500">
-              {results.length} {results.length === 1 ? 'document' : 'documents'} found
-            </span>
-          </div>
+      {/* Loading State */}
+      {loading && (
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span className="ml-3 text-gray-600">Searching through documents...</span>
         </div>
+      )}
 
-        {/* Loading State */}
-        {loading && (
-          <div className="flex justify-center items-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <span className="ml-3 text-gray-600">Searching through documents...</span>
-          </div>
-        )}
+      {/* No Results State */}
+      {!loading && results.length === 0 && (query || Object.values(filters).some(f => f)) && (
+        <div className="text-center py-12">
+          <BookOpen size={64} className="mx-auto text-gray-300 mb-4" />
+          <h3 className="text-xl font-medium text-gray-900 mb-2">No results found</h3>
+          <p className="text-gray-600 max-w-md mx-auto">
+            Try adjusting your search terms or filters.
+          </p>
+        </div>
+      )}
 
-        {/* No Results State */}
-        {!loading && results.length === 0 && (query || Object.values(filters).some(f => f)) && (
-          <div className="text-center py-12">
-            <BookOpen size={64} className="mx-auto text-gray-300 mb-4" />
-            <h3 className="text-xl font-medium text-gray-900 mb-2">No results found</h3>
-            <p className="text-gray-600 max-w-md mx-auto">
-              Try adjusting your search terms or filters.
-            </p>
-          </div>
-        )}
+      {/* Initial State */}
+      {!loading && !query && Object.values(filters).every(f => !f) && (
+        <div className="text-center py-12">
+          <Search size={64} className="mx-auto text-gray-300 mb-4" />
+          <h3 className="text-xl font-medium text-gray-900 mb-2">Ready to explore</h3>
+          <p className="text-gray-600 max-w-md mx-auto">
+            Enter a search query above or use the filters to discover research documents.
+          </p>
+        </div>
+      )}
 
-        {/* Initial State */}
-        {!loading && !query && Object.values(filters).every(f => !f) && (
-          <div className="text-center py-12">
-            <Search size={64} className="mx-auto text-gray-300 mb-4" />
-            <h3 className="text-xl font-medium text-gray-900 mb-2">Ready to explore</h3>
-            <p className="text-gray-600 max-w-md mx-auto">
-              Enter a search query above or use the filters to discover research documents.
-            </p>
-          </div>
-        )}
-
-        {/* Results Table */}
-        {!loading && results.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+      {/* Results Table - UPDATED STRUCTURE */}
+      {!loading && results.length > 0 && (
+        <div className="search-results" style={{ width: '100%', marginTop: '2rem' }}>
+          <div className="results-table-container" style={{ 
+            overflowX: 'auto', 
+            background: 'white', 
+            borderRadius: '8px', 
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' 
+          }}>
+            <table className="results-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
                 <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Document Details
+                  <th style={{ 
+                    background: '#f8fafc', 
+                    padding: '12px 16px', 
+                    textAlign: 'left', 
+                    fontWeight: '600', 
+                    fontSize: '0.875rem', 
+                    color: '#374151', 
+                    borderBottom: '1px solid #e5e7eb' 
+                  }}>
+                    Year
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Research Information
+                  <th style={{ 
+                    background: '#f8fafc', 
+                    padding: '12px 16px', 
+                    textAlign: 'left', 
+                    fontWeight: '600', 
+                    fontSize: '0.875rem', 
+                    color: '#374151', 
+                    borderBottom: '1px solid #e5e7eb' 
+                  }}>
+                    Title & Details
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Key Details
+                  <th style={{ 
+                    background: '#f8fafc', 
+                    padding: '12px 16px', 
+                    textAlign: 'left', 
+                    fontWeight: '600', 
+                    fontSize: '0.875rem', 
+                    color: '#374151', 
+                    borderBottom: '1px solid #e5e7eb' 
+                  }}>
+                    Authors
                   </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th style={{ 
+                    background: '#f8fafc', 
+                    padding: '12px 16px', 
+                    textAlign: 'left', 
+                    fontWeight: '600', 
+                    fontSize: '0.875rem', 
+                    color: '#374151', 
+                    borderBottom: '1px solid #e5e7eb' 
+                  }}>
+                    Category
+                  </th>
+                  <th style={{ 
+                    background: '#f8fafc', 
+                    padding: '12px 16px', 
+                    textAlign: 'left', 
+                    fontWeight: '600', 
+                    fontSize: '0.875rem', 
+                    color: '#374151', 
+                    borderBottom: '1px solid #e5e7eb' 
+                  }}>
+                    Project Name
+                  </th>
+                  <th style={{ 
+                    background: '#f8fafc', 
+                    padding: '12px 16px', 
+                    textAlign: 'left', 
+                    fontWeight: '600', 
+                    fontSize: '0.875rem', 
+                    color: '#374151', 
+                    borderBottom: '1px solid #e5e7eb' 
+                  }}>
+                    Project Status
+                  </th>
+                  <th style={{ 
+                    background: '#f8fafc', 
+                    padding: '12px 16px', 
+                    textAlign: 'left', 
+                    fontWeight: '600', 
+                    fontSize: '0.875rem', 
+                    color: '#374151', 
+                    borderBottom: '1px solid #e5e7eb' 
+                  }}>
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody>
                 {results.map((result, index) => (
-                  <tr key={result.id} className="hover:bg-gray-50 transition-colors duration-150">
-                    <td className="px-6 py-4">
-                      <div className="flex items-start space-x-3">
-                        <div className="flex-shrink-0">
-                          <FileText size={24} className="text-blue-600 mt-1" />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h3 className="text-sm font-semibold text-gray-900 mb-2 line-clamp-2 leading-tight">
-                            {result.cleanTitle}
-                          </h3>
-                          <p className="text-sm text-gray-600 mb-3 line-clamp-2 leading-relaxed">
+                  <tr key={result.id} className="result-row" style={{ 
+                    borderBottom: '1px solid #e5e7eb',
+                    transition: 'background-color 0.15s'
+                  }}>
+                    <td style={{ 
+                      padding: '16px', 
+                      verticalAlign: 'top',
+                      width: '80px',
+                      fontWeight: '500',
+                      color: '#6b7280'
+                    }}>
+                      {result.year || result.publication_year || "N/A"}
+                    </td>
+                    <td style={{ 
+                      padding: '16px', 
+                      verticalAlign: 'top',
+                      minWidth: '300px'
+                    }}>
+                      <div className="title-wrapper">
+                        <strong style={{ 
+                          display: 'block', 
+                          fontSize: '0.95rem', 
+                          color: '#111827', 
+                          marginBottom: '8px', 
+                          lineHeight: '1.4' 
+                        }}>
+                          {result.cleanTitle}
+                        </strong>
+                        {result.displaySnippet && (
+                          <div className="abstract-preview" style={{ 
+                            fontSize: '0.875rem', 
+                            color: '#6b7280', 
+                            lineHeight: '1.5', 
+                            marginBottom: '8px' 
+                          }}>
                             {result.displaySnippet}
-                          </p>
-                          <div className="flex flex-wrap gap-1 mb-2">
-                            {getMedicalSystemBadge(result.medical_system)}
-                            <span className="inline-flex px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
-                              {getResearchCategoryLabel(result.research_category)}
-                            </span>
-                          </div>
-                          <div className="text-xs text-gray-500 space-y-1">
-                            {result.authors && (
-                              <div className="flex items-center space-x-1">
-                                <User size={12} />
-                                <span className="line-clamp-1">{result.authors}</span>
-                              </div>
-                            )}
-                            {result.journal_name && (
-                              <div className="flex items-center space-x-1">
-                                <BookOpen size={12} />
-                                <span className="line-clamp-1">{result.journal_name}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="space-y-3">
-                        <div>
-                          <h4 className="text-xs font-medium text-gray-500 uppercase mb-1">Institution</h4>
-                          <p className="text-sm text-gray-900 flex items-center space-x-1">
-                            <Building size={14} />
-                            <span className="line-clamp-2">{result.institution || 'Not specified'}</span>
-                          </p>
-                        </div>
-                        <div>
-                          <h4 className="text-xs font-medium text-gray-500 uppercase mb-1">Investigator</h4>
-                          <p className="text-sm text-gray-900 line-clamp-2">{result.investigator_name || 'Not specified'}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="space-y-3">
-                        <div>
-                          <h4 className="text-xs font-medium text-gray-500 uppercase mb-1">Status & Year</h4>
-                          <div className="flex items-center space-x-2">
-                            {getStatusBadge(result.project_status)}
-                            <span className="text-sm text-gray-900 flex items-center space-x-1">
-                              <Calendar size={14} />
-                              <span>{result.year || result.publication_year || 'Unknown'}</span>
-                            </span>
-                          </div>
-                        </div>
-                        {result.objectives && (
-                          <div>
-                            <h4 className="text-xs font-medium text-gray-500 uppercase mb-1">Focus Area</h4>
-                            <p className="text-sm text-gray-900 line-clamp-2">{cleanSnippet(result.objectives, 80)}</p>
                           </div>
                         )}
+                        <div className="paper-meta" style={{ 
+                          display: 'flex', 
+                          flexWrap: 'wrap', 
+                          gap: '6px' 
+                        }}>
+                          {result.medical_system && (
+                            <span className="meta-tag category" style={{ 
+                              background: '#f3f4f6', 
+                              padding: '2px 8px', 
+                              borderRadius: '12px', 
+                              fontSize: '0.75rem', 
+                              color: '#4b5563' 
+                            }}>
+                              {getMedicalSystemBadge(result.medical_system)}
+                            </span>
+                          )}
+                          {result.year && (
+                            <span className="meta-tag" style={{ 
+                              background: '#f3f4f6', 
+                              padding: '2px 8px', 
+                              borderRadius: '12px', 
+                              fontSize: '0.75rem', 
+                              color: '#4b5563' 
+                            }}>
+                              📅 {result.year}
+                            </span>
+                          )}
+                          {result.research_category && (
+                            <span className="meta-tag" style={{ 
+                              background: '#f3f4f6', 
+                              padding: '2px 8px', 
+                              borderRadius: '12px', 
+                              fontSize: '0.75rem', 
+                              color: '#4b5563' 
+                            }}>
+                              {getResearchCategoryLabel(result.research_category)}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col space-y-2">
+                    <td style={{ 
+                      padding: '16px', 
+                      verticalAlign: 'top',
+                      minWidth: '200px',
+                      fontSize: '0.875rem',
+                      color: '#374151'
+                    }}>
+                      {result.authors ? result.authors : "Authors not specified"}
+                    </td>
+                    <td style={{ 
+                      padding: '16px', 
+                      verticalAlign: 'top',
+                      minWidth: '120px'
+                    }}>
+                      {result.research_category ? (
+                        <span className="category-badge" style={{ 
+                          background: '#e0e7ff', 
+                          color: '#3730a3', 
+                          padding: '4px 8px', 
+                          borderRadius: '6px', 
+                          fontSize: '0.75rem', 
+                          fontWeight: '500' 
+                        }}>
+                          {getResearchCategoryLabel(result.research_category)}
+                        </span>
+                      ) : "N/A"}
+                    </td>
+                    <td style={{ 
+                      padding: '16px', 
+                      verticalAlign: 'top',
+                      minWidth: '120px',
+                      fontSize: '0.875rem',
+                      color: '#374151'
+                    }}>
+                      {result.project_title || "N/A"}
+                    </td>
+                    <td style={{ 
+                      padding: '16px', 
+                      verticalAlign: 'top',
+                      minWidth: '120px'
+                    }}>
+                      {result.project_status ? (
+                        getStatusBadge(result.project_status)
+                      ) : (
+                        "N/A"
+                      )}
+                    </td>
+                    <td style={{ 
+                      padding: '16px', 
+                      verticalAlign: 'top',
+                      width: '150px'
+                    }}>
+                      <div className="action-buttons" style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        gap: '8px' 
+                      }}>
                         <button
+                          className="download-btn"
+                          onClick={() => handleView(result.id)}
+                          title="View PDF"
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px', 
+                            background: '#059669', 
+                            color: 'white', 
+                            border: 'none', 
+                            padding: '6px 12px', 
+                            borderRadius: '4px', 
+                            fontSize: '0.875rem', 
+                            cursor: 'pointer', 
+                            transition: 'background 0.2s' 
+                          }}
+                        >
+                          <Eye size={16} />
+                          <span>View</span>
+                        </button>
+                        <button
+                          className="download-btn"
                           onClick={() => handleDownload(result.id, result.filename)}
-                          className="inline-flex items-center justify-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200 shadow-sm"
+                          title="Download PDF"
+                          style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px', 
+                            background: '#059669', 
+                            color: 'white', 
+                            border: 'none', 
+                            padding: '6px 12px', 
+                            borderRadius: '4px', 
+                            fontSize: '0.875rem', 
+                            cursor: 'pointer', 
+                            transition: 'background 0.2s' 
+                          }}
                         >
                           <Download size={16} />
                           <span>Download</span>
                         </button>
-                        <div className="text-xs text-gray-500 text-center">
-                          PDF Document
-                        </div>
                       </div>
                     </td>
                   </tr>
@@ -393,8 +549,8 @@ const SearchPage = () => {
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };
