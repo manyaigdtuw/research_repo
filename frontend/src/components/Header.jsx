@@ -1,6 +1,15 @@
 import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Upload, User, LogOut, Settings, FileUp, Download } from 'lucide-react'; // Added Download import
+import { 
+  Search, 
+  Upload, 
+  User, 
+  LogOut, 
+  Settings, 
+  FileUp, 
+  Download, 
+  ArrowLeft 
+} from 'lucide-react';
 import { useAuth } from './AuthContext';
 
 const Header = () => {
@@ -15,46 +24,25 @@ const Header = () => {
     navigate('/');
   };
 
-  // Don't show upload options if still loading
+  const isHomePage = location.pathname === '/';
   const shouldShowUpload = currentUser && 
     (currentUser.role === 'SUPERADMIN' || currentUser.role === 'INSTITUTE');
 
-  const navItems = [
-    { path: '/', icon: Search, label: 'Search' },
-    ...(shouldShowUpload ? [
-      { path: '/upload', icon: Upload, label: 'Single Upload' },
-      { path: '/upload/bulk', icon: FileUp, label: 'Bulk Upload' },
-      { path: '/export', icon: Download, label: 'Export' } // Now Download is defined
-    ] : [])
+  const uploadNavItems = [
+    { path: '/upload', icon: Upload, label: 'Single Upload' },
+    { path: '/upload/bulk', icon: FileUp, label: 'Bulk Upload' },
+    { path: '/export', icon: Download, label: 'Export' }
   ];
 
-  // If loading, show a simplified header that still allows navigation
   if (loading) {
     return (
       <header className="bg-white shadow-lg border-b">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-20">
-            <div className="flex items-center space-x-10">
-              <h3 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                CCRAS
-              </h3>
-              <nav className="flex space-x-1">
-                <Link
-                  to="/"
-                  className={`flex items-center space-x-3 px-5 py-3 rounded-xl transition-all duration-200 font-medium ${
-                    location.pathname === '/'
-                      ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-                      : 'text-gray-600 hover:text-blue-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <Search size={20} />
-                  <span>Search</span>
-                </Link>
-              </nav>
-            </div>
-            <div className="flex items-center space-x-4">
-              <div className="text-sm text-gray-500">Loading...</div>
-            </div>
+            <h3 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              CCRAS
+            </h3>
+            <div className="text-sm text-gray-500">Loading...</div>
           </div>
         </div>
       </header>
@@ -65,37 +53,57 @@ const Header = () => {
     <header className="bg-white shadow-lg border-b">
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-20">
-          <div className="flex items-center space-x-10">
-            <h3 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              CCRAS
-            </h3>
-            <nav className="flex space-x-1">
-              {navItems.map((item) => {
-                const Icon = item.icon;
-                const isActive = location.pathname === item.path;
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className={`flex items-center space-x-3 px-5 py-3 rounded-xl transition-all duration-200 font-medium ${
-                      isActive
-                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
-                        : 'text-gray-600 hover:text-blue-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <Icon size={20} />
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-            </nav>
+          
+          {/* LEFT SIDE: back button, logo, and upload navigation */}
+          <div className="flex items-center space-x-4">
+            {/* Back button (hidden on home page) */}
+            {!isHomePage && (
+              <button
+                onClick={() => navigate(-1)}
+                className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:text-blue-700 hover:bg-gray-100 rounded-lg transition-colors duration-200"
+              >
+                <ArrowLeft size={20} />
+                <span>Back</span>
+              </button>
+            )}
+
+            {/* Logo */}
+            <Link to="/" className="flex items-center">
+              <h3 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                CCRAS
+              </h3>
+            </Link>
+
+            {/* Upload Navigation (left-aligned next to logo) */}
+            {shouldShowUpload && (
+              <nav className="flex space-x-2 ml-6">
+                {uploadNavItems.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 font-medium ${
+                        isActive
+                          ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-lg'
+                          : 'text-gray-600 hover:text-blue-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      <Icon size={18} />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </nav>
+            )}
           </div>
 
-          {/* User Profile Section */}
-          <div className="relative">
+          {/* RIGHT SIDE: user info and dropdown */}
+          <div className="flex items-center space-x-4 relative">
             {currentUser ? (
               <div className="flex items-center space-x-4">
-                <span className="text-sm text-gray-700">
+                <span className="text-sm text-gray-700 hidden md:block">
                   {currentUser.full_name} ({currentUser.role?.toLowerCase()})
                 </span>
                 <button
@@ -112,6 +120,8 @@ const Header = () => {
                       <p className="text-xs text-gray-500">{currentUser.email}</p>
                       <p className="text-xs text-blue-600 capitalize">{currentUser.role?.toLowerCase()}</p>
                     </div>
+
+                    
                     {currentUser.role === 'SUPERADMIN' && (
                       <button
                         onClick={() => {
@@ -124,6 +134,7 @@ const Header = () => {
                         <span>Manage Users</span>
                       </button>
                     )}
+
                     <button
                       onClick={handleLogout}
                       className="flex items-center space-x-2 w-full px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
