@@ -12,6 +12,10 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4")
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", 500))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", 50))
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+
 
 # Medical Systems (enum values)
 MEDICAL_SYSTEMS = ["UNANI", "AYURVEDA", "YOGA", "SIDDHA"]

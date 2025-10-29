@@ -5,12 +5,13 @@ from sqlalchemy import text
 
 from config import DATABASE_URL
 
+# Create Base first
+Base = declarative_base()
+
 # Add pgvector support
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
 # Install pgvector extension on first connection
 with engine.connect() as conn:
-    from sqlalchemy import text
     conn.execute(text('CREATE EXTENSION IF NOT EXISTS vector'))

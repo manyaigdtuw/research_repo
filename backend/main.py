@@ -1,7 +1,8 @@
-from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Form
+from fastapi import FastAPI, UploadFile, File, Depends, HTTPException, Form, Request
 from sqlalchemy.orm import Session
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import shutil, os
 import models
 import schemas
@@ -9,9 +10,11 @@ import crud
 import database
 import utils
 from database import SessionLocal, engine
-from config import STORAGE_PATH, MEDICAL_SYSTEMS, RESEARCH_CATEGORIES, PROJECT_STATUS
+from config import STORAGE_PATH, MEDICAL_SYSTEMS, RESEARCH_CATEGORIES, PROJECT_STATUS, JWT_SECRET_KEY, ALGORITHM
 from typing import Optional
 import json
+from auth import create_access_token, verify_token, get_password_hash, verify_password
+from datetime import timedelta
 
 models.Base.metadata.create_all(bind=engine)
 app = FastAPI(title="Research Repository")
@@ -24,6 +27,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+security = HTTPBearer()
+
 def get_db():
     db = SessionLocal()
     try:
@@ -31,36 +36,84 @@ def get_db():
     finally:
         db.close()
 
-@app.get("/api/debug/faiss-status")
-def debug_faiss_status():
-    """Debug endpoint to check FAISS index status"""
-    total_vectors = utils.faiss_index.ntotal
+def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    token = credentials.credentials
+    token_data = verify_token(token)
+    if token_data is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user = crud.get_user_by_email(db, email=token_data.email)
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=401, detail="User not found or inactive")
+    return user
+
+# Auth endpoints
+@app.post("/api/auth/login")
+def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
+    user = crud.authenticate_user(db, user_data.email, user_data.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    
+    access_token = create_access_token(
+        data={"sub": user.email, "role": user.role.value}
+    )
+    
+    user_response = schemas.UserResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        institution=user.institution,
+        role=user.role,
+        is_active=user.is_active,
+        created_at=user.created_at
+    )
+    
     return {
-        "total_vectors": total_vectors,
-        "index_file_exists": os.path.exists(utils.FAISS_INDEX_PATH),
-        "index_path": utils.FAISS_INDEX_PATH
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": user_response
     }
 
-@app.get("/api/debug/documents")
-def debug_documents(db: Session = Depends(get_db)):
-    """Debug endpoint to list all documents"""
-    documents = db.query(models.Document).all()
-    return [{
-        "id": doc.id,
-        "filename": doc.filename,
-        "title": doc.article_title or doc.project_title,
-        "content_length": len(doc.content) if doc.content else 0,
-        "medical_system": doc.medical_system.value if doc.medical_system else None,
-        "research_category": doc.research_category.value if doc.research_category else None
-    } for doc in documents]
+@app.get("/api/auth/me")
+def get_current_user_info(current_user: models.User = Depends(get_current_user)):
+    return schemas.UserResponse(
+        id=current_user.id,
+        email=current_user.email,
+        full_name=current_user.full_name,
+        institution=current_user.institution,
+        role=current_user.role,
+        is_active=current_user.is_active,
+        created_at=current_user.created_at
+    )
 
+# User management endpoints (Superadmin only)
+@app.post("/api/users")
+def create_user_account(
+    user_data: schemas.UserCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    if current_user.role != models.UserRole.SUPERADMIN:
+        raise HTTPException(status_code=403, detail="Only superadmin can create accounts")
+    
+    new_user = crud.create_user_account(db, user_data, current_user.id)
+    if not new_user:
+        raise HTTPException(status_code=400, detail="User already exists or creation failed")
+    
+    return {"message": "User created successfully", "user_id": new_user.id}
+
+@app.get("/api/users")
+def get_all_users(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    users = crud.get_all_users(db, current_user)
+    return users
+
+# Upload endpoint - only for SUPERADMIN and INSTITUTE
 @app.post("/api/upload")
 async def upload_document(
-    # Medical System and Research Category (required)
     medical_system: str = Form(...),
     research_category: str = Form(...),
-    
-    # Project Details (optional)
     project_title: Optional[str] = Form(None),
     start_year: Optional[int] = Form(None),
     end_year: Optional[int] = Form(None),
@@ -68,21 +121,21 @@ async def upload_document(
     investigator_name: Optional[str] = Form(None),
     sanction_date: Optional[str] = Form(None),
     project_status: str = Form("ONGOING"),
-    
-    # Publication Details (optional)
     article_title: Optional[str] = Form(None),
     publication_year: Optional[int] = Form(None),
     authors: Optional[str] = Form(None),
     journal_name: Optional[str] = Form(None),
-    
-    # Research Details (optional)
     objectives: Optional[str] = Form(None),
     study_protocol: Optional[str] = Form(None),
     outcomes: Optional[str] = Form(None),
-    
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
 ):
+    # Check if user has permission to upload
+    if current_user.role not in [models.UserRole.SUPERADMIN, models.UserRole.INSTITUTE]:
+        raise HTTPException(status_code=403, detail="Only superadmin and institute users can upload documents")
+    
     # Save file
     file_location = os.path.join(STORAGE_PATH, file.filename)
     with open(file_location, "wb") as f:
@@ -94,17 +147,17 @@ async def upload_document(
     # Extract metadata
     extracted_metadata = utils.extract_metadata_from_text(text_content)
     
+    # Use institution from user if not provided
+    if not institution and current_user.institution:
+        institution = current_user.institution
+    
     # Create document with all metadata
     doc_data = schemas.DocumentCreate(
         filename=file.filename,
         content=text_content,
         extracted_data=extracted_metadata,
-        
-        # Medical System and Research Category
         medical_system=medical_system,
         research_category=research_category,
-        
-        # Project Details
         project_title=project_title,
         start_year=start_year,
         end_year=end_year,
@@ -112,14 +165,10 @@ async def upload_document(
         investigator_name=investigator_name,
         sanction_date=sanction_date,
         project_status=project_status,
-        
-        # Publication Details
         article_title=article_title or extracted_metadata.get('title'),
         publication_year=publication_year or extracted_metadata.get('year'),
         authors=authors or extracted_metadata.get('authors'),
         journal_name=journal_name or extracted_metadata.get('journal'),
-        
-        # Research Details
         objectives=objectives,
         study_protocol=study_protocol,
         outcomes=outcomes
@@ -139,6 +188,7 @@ async def upload_document(
         "extracted_metadata": extracted_metadata
     }
 
+# Search endpoint - PUBLIC ACCESS (No authentication required)
 @app.get("/api/search")
 def search_documents(
     query: Optional[str] = None,
@@ -265,10 +315,9 @@ def search_documents(
     print(f"🎉 [SEARCH] Returning {len(formatted_results)} formatted results")
     return formatted_results
 
-
 @app.get("/api/filters/options")
 def get_filter_options(db: Session = Depends(get_db)):
-    """Get available options for filters"""
+    """Get available options for filters - PUBLIC ACCESS"""
     institutions = db.query(models.Document.institution).distinct().all()
     authors = db.query(models.Document.authors).distinct().all()
     journals = db.query(models.Document.journal_name).distinct().all()
@@ -285,32 +334,12 @@ def get_filter_options(db: Session = Depends(get_db)):
         "investigators": [inv[0] for inv in investigators if inv[0]]
     }
 
-@app.get("/api/browse")
-def browse_documents(db: Session = Depends(get_db)):
-    documents = crud.get_documents(db)
-    result = []
-
-    for d in documents:
-        result.append({
-            "id": d.id,
-            "filename": d.filename,
-            "title": d.article_title or d.project_title or d.filename.replace(".pdf", ""),
-            "authors": d.authors or "Unknown Authors",
-            "journal": d.journal_name or "Unknown Journal",
-            "publication_year": d.publication_year,
-            "medical_system": d.medical_system.value if hasattr(d.medical_system, "value") else d.medical_system,
-            "research_category": d.research_category.value if hasattr(d.research_category, "value") else d.research_category,
-            "project_status": d.project_status.value if hasattr(d.project_status, "value") else d.project_status,
-            "institution": d.institution,
-            "investigator_name": d.investigator_name,
-            "created_at": d.created_at.isoformat() if d.created_at else None,
-        })
-
-    return result
-
-
 @app.get("/api/download/{document_id}")
-async def download_document(document_id: int, db: Session = Depends(get_db)):
+async def download_document(
+    document_id: int, 
+    db: Session = Depends(get_db)
+):
+    """Download document - PUBLIC ACCESS"""
     document = db.query(models.Document).filter(models.Document.id == document_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -376,10 +405,82 @@ def get_relevant_snippet(content: str, query: str, max_length: int = 300) -> str
     return content[:max_length] + "..." if len(content) > max_length else content
 
 @app.post("/api/rebuild-index")
-def rebuild_faiss_index(db: Session = Depends(get_db)):
+def rebuild_faiss_index(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
     """Rebuild FAISS index from all documents in database"""
+    if current_user.role != models.UserRole.SUPERADMIN:
+        raise HTTPException(status_code=403, detail="Only superadmin can rebuild index")
+    
     try:
         utils.rebuild_faiss_from_database()
         return {"message": "FAISS index rebuilt successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error rebuilding index: {str(e)}")
+
+# Debug endpoints - superadmin only
+@app.get("/api/debug/faiss-status")
+def debug_faiss_status(
+    current_user: models.User = Depends(get_current_user)
+):
+    """Debug endpoint to check FAISS index status"""
+    if current_user.role != models.UserRole.SUPERADMIN:
+        raise HTTPException(status_code=403, detail="Only superadmin can access debug endpoints")
+    
+    total_vectors = utils.faiss_index.ntotal
+    return {
+        "total_vectors": total_vectors,
+        "index_file_exists": os.path.exists(utils.FAISS_INDEX_PATH),
+        "index_path": utils.FAISS_INDEX_PATH
+    }
+
+@app.get("/api/debug/documents")
+def debug_documents(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Debug endpoint to list all documents"""
+    if current_user.role != models.UserRole.SUPERADMIN:
+        raise HTTPException(status_code=403, detail="Only superadmin can access debug endpoints")
+    
+    documents = db.query(models.Document).all()
+    return [{
+        "id": doc.id,
+        "filename": doc.filename,
+        "title": doc.article_title or doc.project_title,
+        "content_length": len(doc.content) if doc.content else 0,
+        "medical_system": doc.medical_system.value if doc.medical_system else None,
+        "research_category": doc.research_category.value if doc.research_category else None
+    } for doc in documents]
+
+# Create initial superadmin (run once)
+@app.post("/api/create-initial-superadmin")
+def create_initial_superadmin(
+    email: str = Form(...),
+    password: str = Form(...),
+    full_name: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    # Check if superadmin already exists
+    existing_superadmin = db.query(models.User).filter(models.User.role == models.UserRole.SUPERADMIN).first()
+    if existing_superadmin:
+        raise HTTPException(status_code=400, detail="Superadmin already exists")
+    
+    hashed_password = get_password_hash(password)
+    superadmin = models.User(
+        email=email,
+        hashed_password=hashed_password,
+        full_name=full_name,
+        role=models.UserRole.SUPERADMIN,
+        is_active=True
+    )
+    db.add(superadmin)
+    db.commit()
+    db.refresh(superadmin)
+    
+    return {"message": "Initial superadmin created successfully"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
